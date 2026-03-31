@@ -7,21 +7,22 @@ No femtosecond lasers. No lab. No gatekeepers. Just a UV laser and some fused si
 **Writer**: xTool F2 Ultra UV 5W — engraves dots *inside* glass
 **Reader**: xTool F2 Ultra (same machine!) · USB microscope · or Raspberry Pi 5
 **Media**: K9 optical crystal (calibration) · JGS2 fused silica (production)
-**Status**: v0.2 — full encode → engrave → read pipeline, three reader paths, RS ECC
+**Status**: v0.3 — True 5D encoding (dot size = 5th dimension), full encode → engrave → read pipeline, three reader paths, RS ECC
 
 ---
 
 ## Table of Contents
 1. [The Core Idea](#the-core-idea)
-2. [Hardware & Cost](#hardware--cost)
-3. [xTool F2 Ultra — Specs & Settings](#xtool-f2-ultra--specs--settings)
-4. [The Three Reader Paths](#the-three-reader-paths)
-5. [Full Workflow](#full-workflow)
-6. [Storage Density](#storage-density)
-7. [3D Volumetric Mode](#3d-volumetric-mode)
-8. [Software Setup](#software-setup)
-9. [File Structure](#file-structure)
-10. [Roadmap](#roadmap)
+2. [Why It's True 5D](#why-its-true-5d)
+3. [Hardware & Cost](#hardware--cost)
+4. [xTool F2 Ultra — Specs & Settings](#xtool-f2-ultra--specs--settings)
+5. [The Three Reader Paths](#the-three-reader-paths)
+6. [Full Workflow](#full-workflow)
+7. [Storage Density](#storage-density)
+8. [3D Volumetric Mode](#3d-volumetric-mode)
+9. [Software Setup](#software-setup)
+10. [File Structure](#file-structure)
+11. [Roadmap](#roadmap)
 
 ---
 
@@ -40,6 +41,33 @@ F2 Ultra engraves K9 crystal      decode_ssle.py → original file ✅
 ```
 
 **The xTool F2 Ultra is both writer AND reader.** Its dual 48MP cameras can snapshot the engraved dot pattern. Feed that image to `decode_ssle.py`. No extra hardware required for a basic read. The Raspberry Pi path adds automated scanning for large discs.
+
+---
+
+## Why It's True 5D
+
+Most "5D glass" marketing counts 3 spatial dimensions + polarization state + retardance — requiring femtosecond lasers costing $100K+. We achieve true 5D with a $4,249 COTS machine:
+
+| Dimension | What it is | How we use it |
+|-----------|-----------|---------------|
+| **D1** | X position | Column in dot grid |
+| **D2** | Y position | Row in dot grid |
+| **D3** | Z depth | Layer in 3D voxel grid (inner engraving) |
+| **D4** | Dot presence | Engrave here or not (the 1/0 bit) |
+| **D5** | **Dot SIZE** | Pixel brightness → laser dwell time → physical bubble size |
+
+**D5 is real, physical, and readable.** xTool's grayscale inner engraving mode maps pixel brightness directly to laser dwell time — darker pixel = longer dwell = more energy deposited = larger scattering bubble. Our 4-level encoding uses this to pack **2 bits per dot position** instead of 1, doubling capacity in the same physical grid area.
+
+```
+Pixel value  →  Laser dwell  →  Bubble size  →  Encoded value
+   255 (white)    no fire          none           00  (level 0)
+   192 (gray)     short dwell      small          01  (level 1)
+   128 (gray)     medium dwell     medium         10  (level 2)
+     0 (black)    full dwell       large          11  (level 3)
+```
+
+**2D flat grid + D5:** 2 bits/position × same grid area = 2× the data of binary encoding.
+**3D voxel grid + D5:** Add Z-depth (D3) for another N× multiplier. 10 layers × 2 bits = 20× binary 2D.
 
 ---
 
@@ -161,20 +189,25 @@ Best for large discs, high-density grids, or production workflows.
 
 **Step 1 — Encode your file:**
 ```bash
-# 3D voxel STL (recommended — higher capacity, native xTool 3D mode)
+# True 5D — 3D voxel STL (recommended — highest capacity)
 python3 encode_ssle_3d.py myfile.txt --layers 5
-# → myfile_voxel.stl  +  exact xTool Studio import settings
+# → myfile_voxel_L1_small.stl   (low power pass)
+#   myfile_voxel_L2_medium.stl  (medium power pass)
+#   myfile_voxel_L3_large.stl   (full power pass)
+#   + exact xTool Studio settings printed
 
-# 2D flat PNG (simpler, great for small files)
+# True 5D — 2D flat PNG (simpler, great for smaller files)
 python3 encode_ssle.py myfile.txt
-# → myfile_grid.png  +  exact xTool Studio import settings
+# → myfile_5d.png  (4-level grayscale)  +  exact settings
 ```
 
 **Step 2 — Engrave in xTool Studio:**
-- Open **xTool Studio** → New Project
-- Import `myfile_voxel.stl` (3D mode) or `myfile_grid.png` (2D dotting mode)
-- Swap to inner engraving lens
-- Set physical dimensions to the values printed by the encoder
+- Open **xTool Studio** → New Project → swap to inner engraving lens
+- **For 2D PNG:** Import `myfile_5d.png` → **Grayscale** mode → set size from encoder output → Engrave
+  - ⚠️ Do NOT use bitmap/dotting mode — it crushes gray levels and destroys D5
+- **For 3D STL (3 passes):** Import each STL file in order (L1 → L2 → L3)
+  - Each gets different power (50-60% / 65-75% / 80-90%)
+  - Do NOT move the crystal between passes — Z registration is critical
 - Place K9 crystal in machine → Engrave
 
 ---
@@ -202,8 +235,9 @@ python3 decode_ssle.py
 
 **One-liner for all paths:**
 ```bash
-# A: python3 decode_ssle.py raw_scattering/capture.png --cols 200 --rows 200
-# B/C: same — capture first, then decode
+# A/B/C: python3 decode_ssle.py raw_scattering/capture.png --cols 200 --rows 200
+#        python3 decode_ssle.py raw_scattering/capture.png --cols 200 --rows 200 --levels 4
+# (--levels 4 is default for True 5D; use --levels 2 for legacy binary grids)
 ```
 
 ---
@@ -219,25 +253,32 @@ python3 test_pipeline.py --density     # print capacity table
 
 ## Storage Density
 
-### 2D flat PNG (encode_ssle.py → xTool dotting mode)
+### 2D flat PNG (encode_ssle.py → xTool Grayscale mode)
 
-| Dot pitch | Grid in 70×70mm | Usable after RS ECC |
-|-----------|----------------|---------------------|
-| 200 µm (safe starter) | 350×350 | ~14 KB |
-| **100 µm (recommended)** | 700×700 | **~56 KB** |
-| 75 µm | 933×933 | ~100 KB |
-| 50 µm (aggressive) | 1400×1400 | ~224 KB |
+| Dot pitch | Grid in 70×70mm | Binary (1 bit/dot) | **True 5D (2 bits/dot)** |
+|-----------|----------------|---------------------|--------------------------|
+| 200 µm (safe starter) | 350×350 | ~7 KB | **~14 KB** |
+| **100 µm (recommended)** | 700×700 | ~28 KB | **~56 KB** |
+| 75 µm | 933×933 | ~50 KB | **~100 KB** |
+| 50 µm (aggressive) | 1400×1400 | ~112 KB | **~224 KB** |
+
+> **xTool mode for True 5D:** use **Grayscale** inner engraving (NOT bitmap/dotting mode).
+> Bitmap mode crushes gray values to pure black/white — you lose D5 entirely.
 
 ### 3D voxel STL (encode_ssle_3d.py → xTool inner engraving 3D)
 
-| Layers | 100µm XY, 70×70mm | Usable after RS ECC |
-|--------|---------------------|---------------------|
-| 5 layers | 700×700×5 | **~280 KB** |
-| 10 layers | 700×700×10 | **~560 KB** |
-| 20 layers | 700×700×20 | **~1.1 MB** |
+| Layers | 100µm XY, 70×70mm | Binary (1 bit/voxel) | **True 5D (2 bits/voxel)** |
+|--------|---------------------|----------------------|----------------------------|
+| 5 layers | 700×700×5 | ~140 KB | **~280 KB** |
+| 10 layers | 700×700×10 | ~280 KB | **~560 KB** |
+| 20 layers | 700×700×20 | ~560 KB | **~1.1 MB** |
+
+> True 5D 3D outputs **3 STL files** per encode (small/medium/large voxels).
+> Engrave all 3 passes without moving the crystal. xTool Studio handles Z-layering per file.
 
 ```bash
-python3 encode_ssle_3d.py --capacity --layers 10   # exact capacity for your settings
+python3 encode_ssle_3d.py --capacity --layers 10            # binary capacity
+python3 encode_ssle_3d.py --capacity --layers 10 --levels 4 # True 5D capacity
 ```
 
 ---
@@ -318,10 +359,11 @@ python3 test_pipeline.py
 |---------|--------|------|
 | v0.1 | ✅ | Manual capture, dot detection, basic decode |
 | v0.2 | ✅ | Encoder + RS ECC + motorized XY stage + raster scan + 3D STL encoder/decoder + three reader paths |
-| v0.3 | 🔨 | Image tile stitcher · Z-stage for automated 3D reads · 50µm density validation |
-| v0.4 | planned | Adaptive threshold · better fiducial detection (SIFT/ORB) |
+| v0.3 | ✅ | **True 5D encoding** — dot size as 5th dimension, 4-level grayscale, 2 bits/position, 2× capacity |
+| v0.4 | 🔨 | Image tile stitcher · Z-stage for automated 3D reads · 50µm density validation |
+| v0.5 | planned | Adaptive threshold · better fiducial detection (SIFT/ORB) |
 | v1.0 | planned | Turnkey SSLE read/write on Pi 5 — one command, full disc |
-| v2.0 | future | True 5D: femtosecond birefringence encoding (polarization + retardance) |
+| v2.0 | future | 6D: femtosecond birefringence (polarization + retardance) on top of SSLE |
 
 ---
 
