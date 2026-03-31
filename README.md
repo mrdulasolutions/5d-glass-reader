@@ -103,21 +103,30 @@ Pixel value  →  Laser dwell  →  Bubble size  →  Encoded value
 | Inner engraving area | **70 × 70 mm** (dedicated inner lens, included) |
 | Max material height (Z) | 150 mm |
 | Built-in cameras | **Dual 48MP** — used for alignment AND reading |
-| Software | **xTool Studio** (free download) |
-| 2D input (dotting mode) | PNG, JPG, BMP, SVG — load our dot-grid PNG directly |
+| Software | **xTool Studio v1.6.6** — [⬇ Download free](https://www.xtool.com/pages/software) (Win / macOS-Intel / macOS-M) |
+| 2D input (inner engraving) | PNG, JPG, BMP, SVG — load our dot-grid PNG in **Grayscale mode** |
 | 3D input (inner engraving) | **STL, OBJ, AMF, 3MF, GLB, PLY** — load our voxel STL directly |
+
+> **Required reading before first engrave:**
+> - [Course 279 — Getting Started with F2 Ultra UV](https://support.xtool.com/academy/course?id=279)
+> - [Course 280 — F2 Ultra UV Essentials: Software & Materials](https://support.xtool.com/academy/course?id=280)
+> - [Course 281 — F2 Ultra UV Inner Engraving: Skills and Best Practices](https://support.xtool.com/academy/course?id=281)
+> - [Article 2708 — Start Inner Engraving (lens swap guide)](https://support.xtool.com/article/2708)
 
 ### Engrave settings (start here, tune for your glass)
 
-| Setting | 2D PNG dotting | 3D STL inner |
-|---------|---------------|--------------|
-| Power | 80% | 60–70% |
+| Setting | 2D PNG (True 5D grayscale) | 3D STL inner (per pass) |
+|---------|---------------------------|-------------------------|
+| Power | 70–80% | L1: 50–60% · L2: 65–75% · L3: 80–90% |
 | Speed | 300–500 mm/s | 500 mm/s |
-| Dot duration | 50–100 µs | 50 µs |
+| Dot duration | 100–300 µs | 100–200 µs (Dotting sub-mode) |
 | Z depth | 1 mm below surface | auto per layer |
-| Mode | Dotting / Bitmap | Inner Engraving (3D) |
+| Studio mode | **Grayscale** inner engraving | Inner Engraving (3D) → **Dotting** |
 
-**Start on K9 crystal** (optically ideal). Correct dots = bright white scattering points lit from the side. Cracks or cloudy regions = reduce power.
+**Start on K9 crystal** (optically ideal). Correct dots = bright white scattering points lit from the side. Cracks or cloudy regions = reduce power/dot duration.
+
+> **Why Grayscale mode for 2D inner engraving?**
+> xTool's docs say "don't use Grayscale for photos" — that warning is about visual quality for portraits (Jarvis dithering looks better for natural images). For *data encoding*, Grayscale mode is exactly right: it maps pixel brightness directly to laser dwell time → physical bubble size (D5). Our encoder outputs precise gray values (255/192/128/0), not photos. Do NOT use Bitmap/Jarvis/Dither modes — they destroy the gray levels and collapse D5 to binary.
 
 ### About the AI Composer (AImake / Atomm)
 
@@ -288,18 +297,26 @@ python3 encode_ssle_3d.py --capacity --layers 10 --levels 4 # True 5D capacity
 The F2 Ultra natively accepts STL for inner engraving — it fires the laser at each voxel's 3D coordinates automatically. Our encoder builds the STL; xTool Studio handles the Z-layering.
 
 ```bash
+# True 5D — outputs 3 STL files (one per dot size level):
 python3 encode_ssle_3d.py myfile.txt --layers 5
-# → myfile_voxel.stl  (import directly into xTool Studio)
+# → myfile_voxel_L1_small.stl   → import first,  power 50–60%
+# → myfile_voxel_L2_medium.stl  → import second, power 65–75%
+# → myfile_voxel_L3_large.stl   → import third,  power 80–90%
+# In xTool Studio: Inner Engraving → Dotting sub-mode
+# ⚠️  Do NOT move the crystal between the 3 passes
 
 # Decode from per-layer images (one image per Z depth):
 python3 decode_ssle_3d.py layers/ --layers 5
 ```
 
-> **Z-focus for 3D reads:** Requires focus adjustment per layer. Use F2 Ultra's auto-focus (each snapshot at a different Z) or a motorized Z stage on the Pi rig. Hardware for automated 3D reads is the v0.3 milestone.
+> **Z-focus for 3D reads:** Requires focus adjustment per layer. Use F2 Ultra's auto-focus (each snapshot at a different Z) or a motorized Z stage on the Pi rig.
 
 ---
 
 ## Software Setup
+
+**Step 0 — Download xTool Studio** (required to engrave):
+[⬇ xTool Studio v1.6.6 — Windows / macOS-Intel / macOS-M](https://www.xtool.com/pages/software) · Free
 
 ```bash
 git clone https://github.com/mrdulasolutions/5d-glass-reader.git
