@@ -1,4 +1,5 @@
 picamera2
 opencv-python
 numpy
-RPi.GPIO  # for stage later
+reedsolo
+RPi.GPIO

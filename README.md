@@ -83,7 +83,9 @@ Pass `--cols` / `--rows` to match what you used during encoding (default 200×20
 5d-glass-reader/
 ├── encode_ssle.py         # Step 0: any file → xTool dot-grid PNG (run on laptop)
 ├── capture_scattering.py  # Step 1: capture glass disc image (run on Pi)
-├── decode_ssle.py         # Step 2: detect dots + decode back to file (run on Pi)
+├── decode_ssle.py         # Step 2: detect dots + RS decode back to file (run on Pi)
+├── scan_disc.py           # Auto raster scan — full disc via motorized stage
+├── stage_control.py       # XY stepper stage driver (PT-XY100 + RPi.GPIO)
 ├── run_reader.sh          # Runs capture + decode in sequence
 ├── setup.sh               # One-time Pi install script
 ├── requirements.txt       # Python deps
@@ -98,9 +100,9 @@ Pass `--cols` / `--rows` to match what you used during encoding (default 200×20
 
 ## Roadmap
 
-- **v0.1** (now) — manual capture, dot detection, placeholder binary decode
-- **v0.2** — encoder script (file → xTool dot-grid PNG) + motorized raster scan
-- **v0.3** — Reed-Solomon error correction + higher dot density
+- **v0.1** — manual capture, dot detection, basic binary decode
+- **v0.2** ✅ (now) — encoder + Reed-Solomon ECC + motorized XY stage + raster scan
+- **v0.3** — image stitch from multi-tile scan, higher dot density
 - **v1.0** — full SSLE read/write pipeline
 - **v2.0** — true 5D upgrade (femtosecond birefringence encoding)
 
