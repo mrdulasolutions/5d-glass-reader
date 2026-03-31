@@ -149,8 +149,8 @@ def extract_layer_symbols(image_path, cols, rows, threshold, levels):
             cx = min(int((col + 0.5) * cell_w), corrected.shape[1] - 1)
             cy = min(int((row + 0.5) * cell_h), corrected.shape[0] - 1)
             region = corrected[max(0, cy-2):cy+3, max(0, cx-2):cx+3]
-            mean_val = region.mean() if region.size > 0 else 255.0
-            symbols.append(classify_level(mean_val, levels))
+            dot_val = float(region.min()) if region.size > 0 else 255.0
+            symbols.append(classify_level(dot_val, levels))
     return symbols
 
 

@@ -139,7 +139,7 @@ def run_test(cols, rows, ecc, noise, input_file):
         print(f"\n[2] Encoding → {grid_path}")
         try:
             encode(src_path, cols, rows, dot_size=6, dot_spacing=10,
-                   output_path=grid_path, ecc=ecc)
+                   output_path=grid_path, ecc=ecc, levels=4)
             results.append(("Encode", PASS, ""))
         except SystemExit as e:
             results.append(("Encode", FAIL, str(e)))
@@ -159,7 +159,7 @@ def run_test(cols, rows, ecc, noise, input_file):
         out_dir = os.path.join(tmpdir, 'output')
         print(f"\n[4] Decoding → {out_dir}/")
         try:
-            decode(grid_path, out_dir, cols, rows, threshold=80, ecc=ecc)
+            decode(grid_path, out_dir, cols, rows, threshold=80, ecc=ecc, levels=4)
         except SystemExit as e:
             results.append(("Decode", FAIL, f"RS or alignment failure: {e}"))
             _print_results(results)

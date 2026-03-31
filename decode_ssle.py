@@ -151,8 +151,11 @@ def decode(image_path, output_dir, grid_cols, grid_rows, threshold, ecc, levels)
             cy = min(int((row + 0.5) * cell_h), corrected.shape[0] - 1)
             # Sample raw grayscale (not thresholded) for multi-level classification
             region = corrected[max(0, cy - 2):cy + 3, max(0, cx - 2):cx + 3]
-            mean_val = region.mean() if region.size > 0 else 255.0
-            symbols.append(classify_level(mean_val, levels))
+            # Use darkest pixel in region — robust to background blending.
+            # For real glass captures where dots appear BRIGHT (raking light),
+            # invert the image before passing to this decoder.
+            dot_val = float(region.min()) if region.size > 0 else 255.0
+            symbols.append(classify_level(dot_val, levels))
 
     bpp = bits_per_position(levels)
     bits = symbols_to_bits(symbols, levels)
