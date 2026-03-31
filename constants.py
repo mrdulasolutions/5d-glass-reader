@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-constants.py — Shared constants for all 5d-glass-reader scripts.
+constants.py — Shared constants for all EternalDrive-IndieHack scripts.
 
 Import from here rather than redefining per-file so all scripts
 stay in sync when format or tuning values change.

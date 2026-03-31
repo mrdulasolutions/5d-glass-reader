@@ -93,7 +93,7 @@ def _cube_tris(cx, cy, cz, s):
 
 def write_binary_stl(path, all_tris_normals, label=''):
     n = len(all_tris_normals)
-    header = f'5DGlassVoxelSTL mrdulasolutions/5d-glass-reader {label}'.encode()
+    header = f'5DGlassVoxelSTL mrdulasolutions/EternalDrive-IndieHack {label}'.encode()
     with open(path, 'wb') as f:
         f.write(header[:80].ljust(80, b'\x00'))
         f.write(struct.pack('<I', n))

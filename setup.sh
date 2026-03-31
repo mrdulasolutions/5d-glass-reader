@@ -3,7 +3,7 @@
 # Covers: software install · xTool Studio · machine connection · lens swap ·
 #         loading STL · engraving · snapshot capture · decode
 #
-# Run once after: git clone https://github.com/mrdulasolutions/5d-glass-reader.git
+# Run once after: git clone https://github.com/mrdulasolutions/EternalDrive-IndieHack.git
 # Then follow the interactive walkthrough.
 
 set -e
@@ -53,7 +53,7 @@ echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${RESET}"
 echo -e "${BOLD}║                                                          ║${RESET}"
 echo -e "${BOLD}║   5D Glass Eternal Drive — Full Setup Guide              ║${RESET}"
-echo -e "${BOLD}║   mrdulasolutions/5d-glass-reader                       ║${RESET}"
+echo -e "${BOLD}║   mrdulasolutions/EternalDrive-IndieHack                       ║${RESET}"
 echo -e "${BOLD}║                                                          ║${RESET}"
 echo -e "${BOLD}║   Store data permanently inside glass.                   ║${RESET}"
 echo -e "${BOLD}║   No lab. No gatekeepers. Just a UV laser.               ║${RESET}"
@@ -467,8 +467,8 @@ echo ""
 echo -e "  ${GREEN}Test pipeline (no hardware):${RESET}"
 echo      "    python3 test_pipeline.py"
 echo ""
-echo -e "  ${DIM}Full docs: github.com/mrdulasolutions/5d-glass-reader${RESET}"
-echo -e "  ${DIM}Issues:    github.com/mrdulasolutions/5d-glass-reader/issues${RESET}"
+echo -e "  ${DIM}Full docs: github.com/mrdulasolutions/EternalDrive-IndieHack${RESET}"
+echo -e "  ${DIM}Issues:    github.com/mrdulasolutions/EternalDrive-IndieHack/issues${RESET}"
 echo ""
 echo -e "  Built live with Grok + Claude. No gatekeepers. Only build."
 echo ""

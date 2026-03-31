@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v0.4-brightgreen.svg)]()
-[![CI](https://github.com/mrdulasolutions/5d-glass-reader/actions/workflows/test.yml/badge.svg)](https://github.com/mrdulasolutions/5d-glass-reader/actions/workflows/test.yml)
+[![CI](https://github.com/mrdulasolutions/EternalDrive-IndieHack/actions/workflows/test.yml/badge.svg)](https://github.com/mrdulasolutions/EternalDrive-IndieHack/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 [![Laser](https://img.shields.io/badge/laser-xTool%20F2%20Ultra%20UV%205W-purple.svg)](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver)
 [![Python](https://img.shields.io/badge/python-3.8%2B-yellow.svg)]()
@@ -378,8 +378,8 @@ python3 decode_ssle_3d.py layers/ --layers 5
 [⬇ xTool Studio v1.6.6 — Windows / macOS-Intel / macOS-M](https://www.xtool.com/pages/software) · Free
 
 ```bash
-git clone https://github.com/mrdulasolutions/5d-glass-reader.git
-cd 5d-glass-reader
+git clone https://github.com/mrdulasolutions/EternalDrive-IndieHack.git
+cd EternalDrive-IndieHack
 bash setup.sh          # Pi  — installs all deps + creates dirs
 # OR
 pip install -r requirements.txt   # Mac/Windows laptop — encoder + decoder only
@@ -398,7 +398,7 @@ python3 test_pipeline.py --noise 50 # test Reed-Solomon error recovery
 ## File Structure
 
 ```
-5d-glass-reader/
+EternalDrive-IndieHack/
 │
 │  ── Shared ──────────────────────────────────────────────────────────────
 ├── constants.py            shared magic bytes, header layout, GRAY map, thresholds

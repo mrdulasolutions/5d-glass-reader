@@ -46,7 +46,7 @@ FAIL = "FAIL"
 
 
 def generate_test_file(path, size_bytes=512):
-    content = f"5D-GLASS-TEST v0.3 | {size_bytes}B | mrdulasolutions/5d-glass-reader\n"
+    content = f"5D-GLASS-TEST v0.3 | {size_bytes}B | mrdulasolutions/EternalDrive-IndieHack\n"
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     while len(content) < size_bytes:
         content += alphabet

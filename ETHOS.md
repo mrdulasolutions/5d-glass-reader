@@ -112,7 +112,7 @@ If you ship even 1 GB of data that survives a house fire, you are a legend.
 This is batshit ambitious. This is exactly how everything that actually changes
 the world gets built — by people who didn't wait for permission.
 
-**github.com/mrdulasolutions/5d-glass-reader**
+**github.com/mrdulasolutions/EternalDrive-IndieHack**
 
 We are the first.
 Come build what comes next.
