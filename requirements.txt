@@ -1,5 +1,4 @@
 picamera2
 opencv-python
 numpy
-scikit-image
-git+https://github.com/uw-loci/ppm_library.git
+RPi.GPIO  # for stage later

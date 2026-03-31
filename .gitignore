@@ -14,12 +14,10 @@ venv/
 env/
 
 # Runtime output — track directories but not contents
-raw_polarized/*
-!raw_polarized/.gitkeep
+raw_scattering/*
+!raw_scattering/.gitkeep
 output/*
 !output/.gitkeep
-calibration/*
-!calibration/.gitkeep
 
 # Captured images (large binary files)
 *.png
@@ -33,6 +31,8 @@ calibration/*
 .DS_Store
 .AppleDouble
 .LSOverride
+._*
+.claude/
 
 # Editor
 .vscode/

@@ -1,13 +1,14 @@
-# 5D Glass Eternal Drive — Phase 1 Reader (Indie 2026 Build)
-**mrdulasolutions/5d-glass-reader**
+# 5D Glass Eternal Drive — Phase 1 Reader (COTS SSLE Edition)
+**mrdulasolutions** indie hacker build — March 2026
 
-USB polarized microscope reader for real SPhotonix-style 5D silica crystals.
-Decodes birefringence (retardance + slow-axis orientation) using crossed polarizers + Raspberry Pi HQ camera + ppm_library.
+Fully commercial off-the-shelf subsurface laser engraving (SSLE) glass drive.
+Writer: xTool F2 Ultra UV 5W (or equivalent COTS UV laser).
+Reader: Raspberry Pi 5 + HQ Camera + motorized XY stage decodes scattering dots → binary file.
 
-**Hardware:** Pi 5 + HQ Camera + linear polarizers + motorized XY stage (stage control coming in v0.2).
+Status: v0.1 SSLE — generate dot grid → engrave with xTool → scan & decode back to file.
+This is the world's first fully indie COTS glass memory drive.
 
-**Status:** v0.1 — manual polarizer rotation → full retardance + orientation map → basic 5D decode ready.
-We are building the first indie eternal drive reader.
+Next: error correction, higher density, motorized full-disc scan, then true 5D upgrade.
 
 ---
 
@@ -17,8 +18,8 @@ We are building the first indie eternal drive reader.
 |-----------|-------|
 | Raspberry Pi 5 | 4GB+ recommended |
 | Pi HQ Camera (12MP) | IMX477 sensor |
-| 2× Linear polarizers | One fixed (polarizer), one rotatable (analyzer) |
-| USB polarized microscope | Or optical bench with above polarizers |
+| xTool F2 Ultra UV 5W | Or any COTS UV laser engraver |
+| Glass disc / slide | Standard borosilicate or optical glass |
 | Motorized XY stage | Optional in v0.1 — coming in v0.2 |
 
 ---
@@ -26,7 +27,7 @@ We are building the first indie eternal drive reader.
 ## Install (on Pi)
 
 ```bash
-git clone git@github.com:mrdulasolutions/5d-glass-reader.git
+git clone https://github.com/mrdulasolutions/5d-glass-reader.git
 cd 5d-glass-reader
 bash setup.sh
 ```
@@ -40,10 +41,9 @@ bash setup.sh
 ```
 
 This will:
-1. Prompt you to rotate the analyzer to **0°, 45°, 90°, 135°** (press Enter at each)
-2. Capture a polarized image at each angle
-3. Run birefringence decode via ppm_library
-4. Save retardance map to `output/retardance_map.png`
+1. Position the glass disc under the camera and press Enter to capture
+2. Detect scattering dots via OpenCV blob detection
+3. Decode dots → binary file saved to `output/decoded_file.bin`
 
 ---
 
@@ -51,22 +51,21 @@ This will:
 
 ```
 5d-glass-reader/
-├── capture_polarized.py   # Step 1: capture 4 polarizer angles
-├── decode_5d.py           # Step 2: birefringence decode + 5D map
+├── capture_scattering.py  # Step 1: capture glass disc image
+├── decode_ssle.py         # Step 2: detect dots + decode to binary
 ├── run_reader.sh          # Runs both steps in sequence
 ├── setup.sh               # One-time Pi install script
-├── requirements.txt       # Cross-platform Python deps
-├── requirements-pi.txt    # Pi-only deps (adds RPi.GPIO)
-├── raw_polarized/         # Captured images (gitignored)
-├── output/                # Decoded maps (gitignored)
-└── calibration/           # Saved calibration data (gitignored)
+├── requirements.txt       # Python deps
+├── raw_scattering/        # Captured images (gitignored)
+└── output/                # Decoded files (gitignored)
 ```
 
 ---
 
 ## Roadmap
 
-- **v0.1** (now) — manual polarizer rotation, single voxel capture, basic decode
-- **v0.2** — servo-controlled polarizer rotation, motorized XY stage raster scan
-- **v0.3** — full disc raster scan + 3D voxel reconstruction
-- **v1.0** — complete 5D read pipeline (x, y, z, retardance, orientation)
+- **v0.1** (now) — manual capture, dot detection, basic binary decode
+- **v0.2** — motorized XY stage raster scan, perspective correction
+- **v0.3** — error correction (Reed-Solomon), higher dot density
+- **v1.0** — full SSLE read/write pipeline
+- **v2.0** — true 5D upgrade (birefringence encoding)
