@@ -262,7 +262,47 @@ python3 test_pipeline.py --density     # print capacity table
 
 ## Storage Density
 
-### 2D flat PNG (encode_ssle.py → xTool Grayscale mode)
+---
+
+### K9 Rectangle Crystal — 100×50×50 mm (the standard blank)
+
+**Usable inner engraving area: 50×50 mm XY · up to 48 mm Z depth**
+
+#### 2D flat (single layer) — `encode_ssle.py`
+
+| Dot pitch | Grid | Binary (1 bit/dot) | **True 5D (2 bits/dot)** | Encoder command |
+|-----------|------|--------------------|--------------------------|-----------------|
+| 200 µm (safe) | 250×250 | ~6 KB | **~13 KB** | `--cols 250 --rows 250` |
+| **100 µm (recommended)** | 500×500 | ~27 KB | **~54 KB** | `--cols 500 --rows 500` |
+| 75 µm | 667×667 | ~49 KB | **~98 KB** | `--cols 667 --rows 667` |
+| 50 µm (aggressive) | 1000×1000 | ~111 KB | **~222 KB** | `--cols 1000 --rows 1000` |
+
+#### 3D volumetric — `encode_ssle_3d.py` · 100 µm XY · 0.5 mm z-pitch · 500×500 grid
+
+| Layers | Z depth used | Binary (1 bit/voxel) | **True 5D (2 bits/voxel)** | Encoder command |
+|--------|-------------|----------------------|----------------------------|-----------------|
+| 5 | 2.5 mm | ~137 KB | **~270 KB** | `--cols 500 --rows 500 --layers 5` |
+| 10 | 5 mm | ~274 KB | **~540 KB** | `--cols 500 --rows 500 --layers 10` |
+| 20 | 10 mm | ~548 KB | **~1.1 MB** | `--cols 500 --rows 500 --layers 20` |
+| 40 | 20 mm | ~1.1 MB | **~2.2 MB** | `--cols 500 --rows 500 --layers 40` |
+| **80** | **40 mm** | **~2.2 MB** | **~4.3 MB** | `--cols 500 --rows 500 --layers 80` |
+| 96 (max) | 48 mm | ~2.6 MB | **~5.2 MB** | `--cols 500 --rows 500 --layers 96` |
+
+> All values are usable capacity after RS ECC overhead (default `--ecc 20`).
+> Higher layer counts require Z-stage or per-layer manual focus during readback.
+
+```bash
+# Print exact capacity for your K9 config:
+python3 encode_ssle_3d.py --capacity --cols 500 --rows 500 --layers 10 --levels 4
+```
+
+---
+
+### Machine Maximum — 70×70 mm inner engraving area
+
+For reference: if you fill the full xTool F2 Ultra inner area with a larger crystal (JGS2 production runs).
+
+#### 2D flat PNG (encode_ssle.py → xTool Grayscale mode)
 
 | Dot pitch | Grid in 70×70mm | Binary (1 bit/dot) | **True 5D (2 bits/dot)** |
 |-----------|----------------|---------------------|--------------------------|
@@ -274,7 +314,7 @@ python3 test_pipeline.py --density     # print capacity table
 > **xTool mode for True 5D:** use **Grayscale** inner engraving (NOT bitmap/dotting mode).
 > Bitmap mode crushes gray values to pure black/white — you lose D5 entirely.
 
-### 3D voxel STL (encode_ssle_3d.py → xTool inner engraving 3D)
+#### 3D voxel STL (encode_ssle_3d.py → xTool inner engraving 3D)
 
 | Layers | 100µm XY, 70×70mm | Binary (1 bit/voxel) | **True 5D (2 bits/voxel)** |
 |--------|---------------------|----------------------|----------------------------|
