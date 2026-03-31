@@ -24,6 +24,36 @@ World's first fully commercial-off-the-shelf subsurface laser engraving glass me
 
 ---
 
+## xTool F2 Ultra — Inner Engraving Specs (March 2026)
+
+| Spec | Value |
+|------|-------|
+| Laser | 5W UV 355 nm (cold processing — no burning) |
+| Spot size | **0.02 mm (20 µm)** |
+| Max speed | **15,000 mm/s** |
+| Inner engraving area | **70 × 70 mm** (dedicated lens required — included) |
+| Software mode | **Dotting mode** — feed it our dot-grid PNG directly |
+| Best test media | K9 crystal (included) → then move to fused silica JGS1/JGS2 |
+
+**Starting settings for fused silica:** ~60% power, 500–1000 mm/s, single pass.
+Dial in on the included K9 test block first. Dots should be bright white scattering points when lit from the side — not cracks or cloudy regions.
+
+---
+
+## Storage Density (70×70 mm inner area)
+
+| Dot pitch | Grid | Raw capacity | After RS ECC (~8.5% overhead) |
+|-----------|------|-------------|-------------------------------|
+| 200 µm (safe starter) | 350×350 | ~15 KB | ~14 KB |
+| 100 µm (recommended) | 700×700 | ~61 KB | ~56 KB |
+| 75 µm | 933×933 | ~109 KB | ~100 KB |
+| 50 µm (aggressive) | 1400×1400 | ~245 KB | ~224 KB |
+
+**Run `python3 test_pipeline.py --density` to see the full table.**
+The encoder prints exact capacity for your chosen grid before you engrave a single dot.
+
+---
+
 ## Hardware Setup (Step-by-Step)
 
 1. Buy everything above.
@@ -52,6 +82,13 @@ chmod +x run_reader.sh
 ---
 
 ## How to Use (End-to-End Workflow)
+
+**Step 0 — Verify the pipeline (no hardware needed):**
+```bash
+python3 test_pipeline.py               # clean round-trip test
+python3 test_pipeline.py --noise 100   # inject 100 bit flips → test RS recovery
+python3 test_pipeline.py --density     # print density table
+```
 
 **Step 1 — Encode any file to a dot-grid PNG:**
 ```bash
@@ -86,6 +123,7 @@ Pass `--cols` / `--rows` to match what you used during encoding (default 200×20
 ├── decode_ssle.py         # Step 2: detect dots + RS decode back to file (run on Pi)
 ├── scan_disc.py           # Auto raster scan — full disc via motorized stage
 ├── stage_control.py       # XY stepper stage driver (PT-XY100 + RPi.GPIO)
+├── test_pipeline.py       # Software round-trip test — verify before engraving
 ├── run_reader.sh          # Runs capture + decode in sequence
 ├── setup.sh               # One-time Pi install script
 ├── requirements.txt       # Python deps
