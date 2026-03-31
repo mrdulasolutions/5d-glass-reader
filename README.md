@@ -1,13 +1,29 @@
 # 5D Glass Eternal Drive — COTS SSLE Edition
-**mrdulasolutions/5d-glass-reader** · indie hacker build · March 2026
 
-World's first fully commercial-off-the-shelf subsurface laser engraving (SSLE) glass memory drive + reader.
-No femtosecond lasers. No lab. No gatekeepers. Just a UV laser and some fused silica.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-v0.3-brightgreen.svg)]()
+[![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
+[![Laser](https://img.shields.io/badge/laser-xTool%20F2%20Ultra%20UV%205W-purple.svg)](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver)
+[![Python](https://img.shields.io/badge/python-3.8%2B-yellow.svg)]()
 
-**Writer**: xTool F2 Ultra UV 5W — engraves dots *inside* glass
-**Reader**: xTool F2 Ultra (same machine!) · USB microscope · or Raspberry Pi 5
-**Media**: K9 optical crystal (calibration) · JGS2 fused silica (production)
-**Status**: v0.3 — True 5D encoding (dot size = 5th dimension), full encode → engrave → read pipeline, three reader paths, RS ECC
+> **Store data permanently inside glass — with a $4,249 laser engraver you can buy today.**
+> No femtosecond lasers. No cleanroom. No university lab. No gatekeepers.
+
+This is the world's first fully commercial-off-the-shelf (COTS) subsurface laser engraving (SSLE) glass memory system. It encodes arbitrary binary files as a grid of microscopic scattering dots *inside* K9 optical crystal or fused silica glass — permanent, non-magnetic, radiation-hard, and readable with the same machine that wrote it.
+
+The xTool F2 Ultra UV 5W is both the **writer** and the **reader**. Its dual 48MP cameras can snapshot the engraved dot pattern and feed it straight to the decoder. No extra hardware required to get started.
+
+---
+
+| | |
+|---|---|
+| **Writer** | xTool F2 Ultra UV 5W — engraves scattering microbubbles *inside* glass |
+| **Reader** | xTool F2 Ultra (same machine) · USB microscope · Raspberry Pi 5 + HQ Camera |
+| **Media** | K9 optical crystal — calibration & production · JGS2 fused silica — archival production |
+| **Capacity** | 54 KB (2D · 100µm · K9 50×50mm) → **5.2 MB** (3D · 96 layers · full depth) |
+| **Durability** | Estimated millions of years — glass is chemically inert, non-magnetic, radiation-hard |
+| **Cost to start** | ~$4,300 (xTool F2 Ultra + K9 crystals — that's it) |
+| **Status** | v0.3 — True 5D · full encode → engrave → read pipeline · RS ECC · three reader paths |
 
 ---
 
