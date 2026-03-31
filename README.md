@@ -1,7 +1,8 @@
 # 5D Glass Eternal Drive — COTS SSLE Edition
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.3-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-v0.4-brightgreen.svg)]()
+[![CI](https://github.com/mrdulasolutions/5d-glass-reader/actions/workflows/test.yml/badge.svg)](https://github.com/mrdulasolutions/5d-glass-reader/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 [![Laser](https://img.shields.io/badge/laser-xTool%20F2%20Ultra%20UV%205W-purple.svg)](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver)
 [![Python](https://img.shields.io/badge/python-3.8%2B-yellow.svg)]()
@@ -23,7 +24,7 @@ The xTool F2 Ultra UV 5W is both the **writer** and the **reader**. Its dual 48M
 | **Capacity** | 54 KB (2D · 100µm · K9 50×50mm) → **5.2 MB** (3D · 96 layers · full depth) |
 | **Durability** | Estimated millions of years — glass is chemically inert, non-magnetic, radiation-hard |
 | **Cost to start** | ~$4,300 (xTool F2 Ultra + K9 crystals — that's it) |
-| **Status** | v0.3 — True 5D · full encode → engrave → read pipeline · RS ECC · three reader paths |
+| **Status** | v0.4 — True 5D · disc.json sidecar · calibration tool · green CI · 2D+3D round-trip tested |
 
 ---
 
@@ -384,9 +385,12 @@ bash setup.sh          # Pi  — installs all deps + creates dirs
 pip install -r requirements.txt   # Mac/Windows laptop — encoder + decoder only
 ```
 
-**Test the full pipeline (no hardware):**
+**Test the full pipeline (no hardware needed — both 2D and 3D):**
 ```bash
-python3 test_pipeline.py
+python3 test_pipeline.py            # 2D + 3D round-trip
+python3 test_pipeline.py --test 2d  # 2D only
+python3 test_pipeline.py --test 3d  # 3D only
+python3 test_pipeline.py --noise 50 # test Reed-Solomon error recovery
 ```
 
 ---
@@ -396,28 +400,40 @@ python3 test_pipeline.py
 ```
 5d-glass-reader/
 │
+│  ── Shared ──────────────────────────────────────────────────────────────
+├── constants.py            shared magic bytes, header layout, GRAY map, thresholds
+│
 │  ── Encoding (run on any machine) ──────────────────────────────────────
-├── encode_ssle.py          2D: any file → dot-grid PNG  (xTool dotting mode)
-├── encode_ssle_3d.py       3D: any file → voxel STL     (xTool inner 3D mode)
+├── encode_ssle.py          2D: any file → dot-grid PNG + disc.json sidecar
+├── encode_ssle_3d.py       3D: any file → 3× voxel STLs + disc.json sidecar
+│                           --render-layers  also emits per-layer PNGs (for 3D test)
+├── make_stl.sh             interactive wizard: pick file → pick K9 → encode → print xTool steps
 │
 │  ── Capture (three paths — see The Three Reader Paths above) ───────────
-├── capture_scattering.py   --source xtool ⚡ | usb 💡 | pi 🎯 | file
+├── capture_scattering.py   --source xtool ⚡ | usb 💡 | pi 🎯 | file  --output path
 │
 │  ── Decoding ────────────────────────────────────────────────────────────
-├── decode_ssle.py          2D dot-grid → original file  (RS ECC + fiducials)
-├── decode_ssle_3d.py       3D multi-layer → original file
-├── run_reader.sh           one-shot: Pi capture + 2D decode
+├── decode_ssle.py          2D: scanned PNG → original file  (--disc auto-configures)
+├── decode_ssle_3d.py       3D: per-layer PNGs → original file  (--disc auto-configures)
+├── run_reader.sh           interactive: capture source → capture → decode  (--disc support)
+├── read_disc.sh            interactive: disc.json sidecar → capture → decode  (2D+3D)
+│
+│  ── Calibration ─────────────────────────────────────────────────────────
+├── calibrate_glass.py      --generate  writes calibration target PNG (engrave this)
+│                           --analyze   reads scanned target → writes calibration.json
+│                           Decoders load calibration.json automatically if present.
 │
 │  ── Stage / automated scanning ─────────────────────────────────────────
 ├── stage_control.py        XY stepper driver (PT-XY100, RPi.GPIO, sim mode)
 ├── scan_disc.py            automated boustrophedon raster scan + manifest
 │
-│  ── Verification ────────────────────────────────────────────────────────
-├── test_pipeline.py        encode→decode round-trip  --noise --density
+│  ── Verification & CI ───────────────────────────────────────────────────
+├── test_pipeline.py        2D + 3D encode→decode round-trip  --noise --density --test 2d|3d
+├── .github/workflows/test.yml   GitHub Actions CI — runs both pipelines on every push
 │
 │  ── Setup ───────────────────────────────────────────────────────────────
-├── setup.sh                one-time install (Pi)
-├── requirements.txt        picamera2 · opencv · numpy · reedsolo · RPi.GPIO
+├── setup.sh                guided 7-part install (deps → xTool → lens → encode → engrave → read)
+├── requirements.txt        opencv · numpy · reedsolo  (+picamera2, RPi.GPIO on Pi)
 │
 │  ── Docs ────────────────────────────────────────────────────────────────
 ├── README.md               this file
@@ -425,6 +441,23 @@ python3 test_pipeline.py
 ├── CONTRIBUTING.md         how to join the build
 └── LICENSE                 MIT
 ```
+
+### disc.json sidecar
+
+Every encode writes a `<name>_disc.json` alongside the STL or PNG. Keep it with the crystal — it records every parameter needed to decode:
+
+```json
+{
+  "format": "3D",
+  "cols": 500, "rows": 500, "layers": 10,
+  "ecc": 20, "levels": 4,
+  "source_file": "myfile.txt",
+  "source_crc32": "6F408BAB",
+  "stl_files": ["myfile_voxel_L1_small.stl", "..."]
+}
+```
+
+Read it back with `bash read_disc.sh --disc myfile_voxel_disc.json` — no flags to remember.
 
 ---
 
@@ -526,7 +559,8 @@ When the build moves to femtosecond birefringence encoding, the optical readout 
 | v0.1 | ✅ | Manual capture, dot detection, basic decode |
 | v0.2 | ✅ | Encoder + RS ECC + motorized XY stage + raster scan + 3D STL encoder/decoder + three reader paths |
 | v0.3 | ✅ | **True 5D encoding** — dot size as 5th dimension, 4-level grayscale, 2 bits/position, 2× capacity |
-| v0.4 | 🔨 | Image tile stitcher · Z-stage for automated 3D reads · 40µm density validation |
+| v0.4 | ✅ | **Full stack hardening** — constants.py · ECC in header · disc.json sidecar · read_disc.sh · calibrate_glass.py · GitHub Actions CI · 2D+3D round-trip test |
+| v0.5 | 🔨 | Image tile stitcher · Z-stage automated 3D reads · 40µm density validation · ML threshold classifier |
 | v0.5 | planned | Adaptive threshold · SIFT/ORB fiducial detection · full 96-layer K9 read |
 | v1.0 | planned | Turnkey SSLE read/write on Pi 5 — one command, full disc, automated Z-stack |
 | v2.0 | future | Femtosecond laser drop-in · birefringence encoding · z1998w ML decoder |

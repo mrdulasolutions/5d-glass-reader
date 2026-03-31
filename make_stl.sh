@@ -4,6 +4,7 @@
 #
 # Walks you through picking a file, choosing a K9 size, and runs the encoder.
 # Outputs the exact xTool Studio steps to follow.
+# A disc.json sidecar is written alongside the STLs — keep it with the disc.
 
 set -e
 
@@ -31,17 +32,17 @@ else
     read -r INPUT
 fi
 
-INPUT="${INPUT%\"}"   # strip surrounding quotes if drag-dropped
+INPUT="${INPUT%\"}"
 INPUT="${INPUT#\"}"
-INPUT="${INPUT% }"    # strip trailing space
+INPUT="${INPUT% }"
 
 if [ ! -f "$INPUT" ]; then
     echo -e "${RED}ERROR: File not found: $INPUT${RESET}"
     exit 1
 fi
 
-FILESIZE=$(wc -c < "$INPUT" | tr -d ' ')
-FILENAME=$(basename "$INPUT")
+FILESIZE=$(python3 -c "import os; print(os.path.getsize('$INPUT'))")
+FILENAME=$(python3 -c "import os; print(os.path.basename('$INPUT'))")
 echo ""
 echo -e "  File    : ${BOLD}$FILENAME${RESET}  ($FILESIZE bytes)"
 
@@ -85,8 +86,9 @@ case "$PITCH_CHOICE" in
     *) PITCH_UM=100 ;;
 esac
 
-PITCH_MM=$(echo "scale=4; $PITCH_UM / 1000" | bc)
-GRID=$(echo "$CRYSTAL_MM / $PITCH_MM" | bc)
+# Use Python for all arithmetic — no bc dependency
+PITCH_MM=$(python3 -c "print(f'{$PITCH_UM / 1000:.4f}')")
+GRID=$(python3 -c "print(int($CRYSTAL_MM / ($PITCH_UM / 1000)))")
 
 # ── Step 4: Pick layers ───────────────────────────────────────────────────────
 
@@ -112,9 +114,28 @@ case "$LAYER_CHOICE" in
     *) LAYERS=5  ;;
 esac
 
-ECC=20
+# ── Step 5: Pick ECC strength ─────────────────────────────────────────────────
 
-# ── Step 5: Show capacity and confirm ────────────────────────────────────────
+echo ""
+echo -e "${CYAN}Error correction strength?${RESET}"
+echo ""
+echo "  1) ECC=10  — light, max capacity"
+echo "  2) ECC=20  — balanced (default, corrects ~8% errors)"
+echo "  3) ECC=40  — strong (corrects ~16%, better for rough glass)"
+echo "  4) Custom"
+echo ""
+echo -n "  Choice [2]: "
+read -r ECC_CHOICE
+ECC_CHOICE="${ECC_CHOICE:-2}"
+
+case "$ECC_CHOICE" in
+    1) ECC=10 ;;
+    3) ECC=40 ;;
+    4) echo -n "  ECC value (10–60): "; read -r ECC ;;
+    *) ECC=20 ;;
+esac
+
+# ── Step 6: Show capacity and confirm ────────────────────────────────────────
 
 echo ""
 echo -e "${YELLOW}── Capacity check ──────────────────────────────${RESET}"
@@ -129,18 +150,17 @@ echo ""
 echo -e "  File to encode : ${BOLD}$FILENAME${RESET} ($FILESIZE bytes)"
 echo ""
 
-# Check if file fits (rough check — encoder will catch exact overflow)
+# Rough capacity check (Python)
 USABLE_ROUGH=$(python3 -c "
-import math
 grid=$GRID; layers=$LAYERS; ecc=$ECC; bpp=2
 dc = grid - 2*(3+1)
 raw_bytes = (dc * dc * layers * bpp) // 8
-usable = int(raw_bytes * (235/255)) - 46
-print(usable)
+usable = int(raw_bytes * (235/255)) - 47
+print(max(0, usable))
 ")
 
 if [ "$FILESIZE" -gt "$USABLE_ROUGH" ]; then
-    echo -e "${RED}  ⚠️  File ($FILESIZE bytes) may be too large for this config (~${USABLE_ROUGH} bytes usable).${RESET}"
+    echo -e "${RED}  WARNING: File ($FILESIZE bytes) may be too large for this config (~${USABLE_ROUGH} bytes usable).${RESET}"
     echo "     Try more layers or a smaller file."
     echo ""
 fi
@@ -153,7 +173,7 @@ if [[ "$CONFIRM" =~ ^[Nn] ]]; then
     exit 0
 fi
 
-# ── Step 6: Run encoder ───────────────────────────────────────────────────────
+# ── Step 7: Run encoder ───────────────────────────────────────────────────────
 
 echo ""
 echo -e "${YELLOW}── Encoding ─────────────────────────────────────${RESET}"
@@ -164,11 +184,14 @@ python3 encode_ssle_3d.py "$INPUT" \
     --ecc "$ECC" \
     --levels 4
 
-# ── Step 7: Print xTool Studio instructions ───────────────────────────────────
+# Find the disc.json sidecar that was just written
+BASENAME=$(python3 -c "import os; print(os.path.splitext('$INPUT')[0])")
+DISC_JSON="${BASENAME}_voxel_disc.json"
 
-BASENAME="${INPUT%.*}"
-ZDEPTH=$(echo "scale=1; $LAYERS * 0.5" | bc)
-GRIDMM=$(python3 -c "print(f'{$GRID * $PITCH_MM:.1f}')")
+# ── Step 8: Print xTool Studio instructions ───────────────────────────────────
+
+ZDEPTH=$(python3 -c "print(f'{$LAYERS * 0.5:.1f}')")
+GRIDMM=$(python3 -c "print(f'{$GRID * $PITCH_UM / 1000:.1f}')")
 
 echo ""
 echo -e "${GREEN}══════════════════════════════════════════════════${RESET}"
@@ -179,7 +202,6 @@ echo -e "${BOLD}Before you start:${RESET}"
 echo "  • Swap to the inner engraving lens (ships in the box)"
 echo "  • Setup guide: https://support.xtool.com/article/2708"
 echo "  • Place K9 crystal flat and square in the machine"
-echo "  • Required courses (read first): 279, 280, 281 at support.xtool.com/academy"
 echo ""
 echo -e "${BOLD}In xTool Studio — 3 passes, do NOT move the crystal between them:${RESET}"
 echo ""
@@ -188,7 +210,7 @@ echo "    File   : ${BASENAME}_voxel_L1_small.stl"
 echo "    Mode   : Inner Engraving (3D) → Dotting"
 echo "    Size   : ${GRIDMM} × ${GRIDMM} × ${ZDEPTH} mm"
 echo "    Power  : 50–60%   Speed: 500 mm/s   Dot Duration: 100–150 µs"
-echo "    ✓ Check for clean dots (bright white under side-light). No cracks → continue."
+echo "    Check  : Clean dots under side-light. No cracks → continue."
 echo ""
 echo -e "  ${CYAN}Pass 2 — Medium dots${RESET}"
 echo "    File   : ${BASENAME}_voxel_L2_medium.stl"
@@ -202,9 +224,14 @@ echo "    Mode   : Inner Engraving (3D) → Dotting"
 echo "    Size   : ${GRIDMM} × ${GRIDMM} × ${ZDEPTH} mm"
 echo "    Power  : 80–90%   Speed: 500 mm/s   Dot Duration: 150–200 µs"
 echo ""
-echo -e "${BOLD}To read it back later:${RESET}"
-echo "  python3 decode_ssle_3d.py --cols $GRID --rows $GRID --layers $LAYERS --ecc $ECC --levels 4"
+echo -e "${BOLD}To read it back later (keep the disc.json with the crystal):${RESET}"
+if [ -f "$DISC_JSON" ]; then
+    echo "  bash read_disc.sh --disc $DISC_JSON"
+else
+    echo "  python3 decode_ssle_3d.py --cols $GRID --rows $GRID --layers $LAYERS --ecc $ECC --levels 4"
+fi
 echo ""
 echo -e "${YELLOW}Tip: start conservative on a fresh K9 — 55% / 150µs for Pass 1.${RESET}"
 echo -e "${YELLOW}     Cloudy streaks = too much power. No dots = too little.${RESET}"
+echo -e "${YELLOW}     Sidecar written to: ${DISC_JSON}${RESET}"
 echo ""

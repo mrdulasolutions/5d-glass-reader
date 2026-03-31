@@ -47,11 +47,11 @@ import shutil
 import sys
 import time
 
-OUTPUT_DIR = 'raw_scattering'
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'capture.png')
+DEFAULT_OUTPUT_DIR  = 'raw_scattering'
+DEFAULT_OUTPUT_FILE = os.path.join(DEFAULT_OUTPUT_DIR, 'capture.png')
 
 
-def capture_pi():
+def capture_pi(output_file):
     """Raspberry Pi HQ Camera via picamera2. Most accurate — use with motorized stage."""
     try:
         from picamera2 import Picamera2
@@ -74,11 +74,11 @@ def capture_pi():
 
     img = cam.capture_array()
     cam.stop()
-    cv2.imwrite(OUTPUT_FILE, img)
-    print(f"[capture] Saved → {OUTPUT_FILE}")
+    cv2.imwrite(output_file, img)
+    print(f"[capture] Saved → {output_file}")
 
 
-def capture_usb(device):
+def capture_usb(device, output_file):
     """USB digital microscope or webcam. Easiest standalone reader."""
     try:
         import cv2
@@ -92,7 +92,6 @@ def capture_usb(device):
         print(f"       Try a different --device index (0, 1, 2, ...)")
         sys.exit(1)
 
-    # Set max resolution
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  4096)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 3072)
 
@@ -108,11 +107,11 @@ def capture_usb(device):
         print("ERROR: Failed to capture frame from USB camera.")
         sys.exit(1)
 
-    cv2.imwrite(OUTPUT_FILE, frame)
-    print(f"[capture] Saved → {OUTPUT_FILE}")
+    cv2.imwrite(output_file, frame)
+    print(f"[capture] Saved → {output_file}")
 
 
-def capture_xtool(src_file):
+def capture_xtool(src_file, output_file):
     """
     xTool F2 Ultra camera path — fastest + easiest, same machine for write AND read.
 
@@ -145,12 +144,12 @@ def capture_xtool(src_file):
         print(f"ERROR: File not found: {src_file}")
         sys.exit(1)
 
-    shutil.copy2(src_file, OUTPUT_FILE)
-    print(f"[capture] xTool snapshot copied → {OUTPUT_FILE}")
+    shutil.copy2(src_file, output_file)
+    print(f"[capture] xTool snapshot copied → {output_file}")
     print(f"          Ready for: python3 decode_ssle.py")
 
 
-def capture_file(src_file):
+def capture_file(src_file, output_file):
     """Use any existing image file (phone photo, exported scan, screenshot)."""
     if not src_file:
         print("ERROR: --source file requires --file <path>")
@@ -158,8 +157,8 @@ def capture_file(src_file):
     if not os.path.exists(src_file):
         print(f"ERROR: File not found: {src_file}")
         sys.exit(1)
-    shutil.copy2(src_file, OUTPUT_FILE)
-    print(f"[capture] Image copied → {OUTPUT_FILE}")
+    shutil.copy2(src_file, output_file)
+    print(f"[capture] Image copied → {output_file}")
 
 
 if __name__ == '__main__':
@@ -178,18 +177,20 @@ if __name__ == '__main__':
     parser.add_argument('--file',   help='Image path (required for --source xtool or file)')
     parser.add_argument('--device', type=int, default=0,
                         help='USB camera device index (default: 0)')
+    parser.add_argument('--output', '-o', default=DEFAULT_OUTPUT_FILE,
+                        help=f'Output image path (default: {DEFAULT_OUTPUT_FILE})')
     args = parser.parse_args()
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
 
     if args.source == 'pi':
-        capture_pi()
+        capture_pi(args.output)
     elif args.source == 'usb':
-        capture_usb(args.device)
+        capture_usb(args.device, args.output)
     elif args.source == 'xtool':
-        capture_xtool(args.file)
+        capture_xtool(args.file, args.output)
     elif args.source == 'file':
-        capture_file(args.file)
+        capture_file(args.file, args.output)
 
     print()
-    print(f"Next: python3 decode_ssle.py")
+    print(f"Next: python3 decode_ssle.py {args.output}")

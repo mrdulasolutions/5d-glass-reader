@@ -19,8 +19,11 @@ With --levels 4 (default), each grid position encodes 2 bits (4 states):
 xTool Studio grayscale mode maps pixel brightness → laser dwell time → dot size.
 Load the output PNG in xTool Studio → Grayscale mode → inner engraving.
 
-Capacity vs. binary (--levels 2):
-  4-level: 2 bits/position → 2× the data in the same physical grid area
+Header format (v4, 47 bytes):
+  MAGIC(4) + levels(1) + ecc(1) + fname_len(1) + fname(32) + size(4) + crc32(4)
+
+A disc.json sidecar is written alongside the PNG so read_disc.sh and
+decode_ssle.py can auto-configure without remembering the parameters.
 
 Usage:
     python3 encode_ssle.py myfile.txt                     # true 5D, 4-level
@@ -30,6 +33,7 @@ Usage:
 """
 
 import argparse
+import json
 import math
 import os
 import struct
@@ -40,25 +44,15 @@ import cv2
 import numpy as np
 from reedsolo import RSCodec
 
-# ── Format versions ───────────────────────────────────────────────────────────
-MAGIC_BINARY  = b'5DG\x02'   # legacy binary (1 bit/position)
-MAGIC_5D      = b'5DG\x03'   # true 5D (multi-level, 2 bits/position for 4-level)
+from constants import (
+    MAGIC_2D_5D, MAGIC_2D_BINARY,
+    FIDUCIAL_SIZE, BORDER, MAX_FILENAME_LEN,
+    HEADER_BYTES, DEFAULT_ECC, DEFAULT_LEVELS,
+    GRAY, bits_per_position,
+)
 
-FIDUCIAL_SIZE = 3
-BORDER        = 1
-MAX_FILENAME_LEN = 32
-# Header: MAGIC(4) + levels(1) + fname_len(1) + fname(32) + file_size(4) + crc32(4) = 46 bytes
-HEADER_BYTES  = 4 + 1 + 1 + MAX_FILENAME_LEN + 4 + 4
-DEFAULT_ECC   = 20
-DEFAULT_LEVELS = 4
-
-# Gray values for each level: 0=no dot(white), 1=small, 2=medium, 3=large(black)
-# Darker pixel → more laser power in xTool grayscale mode → larger scattering bubble
-GRAY = {0: 255, 1: 192, 2: 128, 3: 0}
-
-
-def bits_per_position(levels):
-    return int(math.log2(levels))  # levels=4 → 2, levels=2 → 1
+# ── Legacy magic kept for backward-compat reading (decode_ssle.py handles all) ─
+# Writing always uses MAGIC_2D_5D (v4) which includes ECC in header.
 
 
 def file_to_symbols(data: bytes, levels: int) -> list:
@@ -68,13 +62,12 @@ def file_to_symbols(data: bytes, levels: int) -> list:
     for byte in data:
         for i in range(7, -1, -1):
             bits.append((byte >> i) & 1)
-    # Pad to multiple of bpp
     while len(bits) % bpp:
         bits.append(0)
     symbols = []
     for i in range(0, len(bits), bpp):
         val = 0
-        for b in bits[i:i+bpp]:
+        for b in bits[i:i + bpp]:
             val = (val << 1) | b
         symbols.append(val)
     return symbols
@@ -84,16 +77,18 @@ def symbols_to_bits(symbols: list, levels: int) -> list:
     bpp = bits_per_position(levels)
     bits = []
     for sym in symbols:
-        for i in range(bpp-1, -1, -1):
+        for i in range(bpp - 1, -1, -1):
             bits.append((sym >> i) & 1)
     return bits
 
 
-def build_header(filename: str, file_size: int, crc32: int, levels: int) -> bytes:
+def build_header(filename: str, file_size: int, crc32: int, levels: int, ecc: int) -> bytes:
+    """Build v4 header: MAGIC(4)+levels(1)+ecc(1)+fname_len(1)+fname(32)+size(4)+crc32(4)."""
     fname = os.path.basename(filename).encode()[:MAX_FILENAME_LEN]
     return (
-        MAGIC_5D
+        MAGIC_2D_5D
         + bytes([levels])
+        + bytes([ecc])
         + bytes([len(fname)])
         + fname.ljust(MAX_FILENAME_LEN, b'\x00')
         + struct.pack('>I', file_size)
@@ -113,14 +108,13 @@ def encode(input_path, grid_cols, grid_rows, dot_size, dot_spacing, output_path,
 
     file_size = len(file_data)
     crc32 = zlib.crc32(file_data) & 0xFFFFFFFF
-    header = build_header(input_path, file_size, crc32, levels)
+    header = build_header(input_path, file_size, crc32, levels, ecc)
     raw_payload = header + file_data
 
     # Reed-Solomon encode
     rs = RSCodec(ecc)
     rs_payload = bytes(rs.encode(raw_payload))
 
-    # Convert to symbols (2 bits each for 4-level)
     bpp = bits_per_position(levels)
     payload_symbols = file_to_symbols(rs_payload, levels)
 
@@ -136,18 +130,16 @@ def encode(input_path, grid_cols, grid_rows, dot_size, dot_spacing, output_path,
         print(f"  Fix       : --cols {needed} --rows {needed}")
         sys.exit(1)
 
-    # Pad
     payload_symbols += [0] * (capacity_symbols - len(payload_symbols))
 
-    # Build grayscale grid (0=no dot, 1=small, 2=medium, 3=large)
+    # Build level grid
     grid = np.zeros((grid_rows, grid_cols), dtype=np.uint8)
 
-    # Fiducial markers at corners (always level 3 = solid black = max dot)
-    for ry, rx in [(0,0), (0, grid_cols-FIDUCIAL_SIZE),
-                   (grid_rows-FIDUCIAL_SIZE, 0), (grid_rows-FIDUCIAL_SIZE, grid_cols-FIDUCIAL_SIZE)]:
-        grid[ry:ry+FIDUCIAL_SIZE, rx:rx+FIDUCIAL_SIZE] = 3
+    # Fiducial markers (level 3 = solid black = max dot)
+    for ry, rx in [(0, 0), (0, grid_cols - FIDUCIAL_SIZE),
+                   (grid_rows - FIDUCIAL_SIZE, 0), (grid_rows - FIDUCIAL_SIZE, grid_cols - FIDUCIAL_SIZE)]:
+        grid[ry:ry + FIDUCIAL_SIZE, rx:rx + FIDUCIAL_SIZE] = 3
 
-    # Fill data area
     origin_r = FIDUCIAL_SIZE + BORDER
     origin_c = FIDUCIAL_SIZE + BORDER
     sym_idx = 0
@@ -160,7 +152,7 @@ def encode(input_path, grid_cols, grid_rows, dot_size, dot_spacing, output_path,
     cell = dot_spacing
     img_h = grid_rows * cell
     img_w = grid_cols * cell
-    img = np.full((img_h, img_w), 255, dtype=np.uint8)  # white background
+    img = np.full((img_h, img_w), 255, dtype=np.uint8)
     radius = max(1, dot_size // 2)
 
     for row in range(grid_rows):
@@ -169,15 +161,29 @@ def encode(input_path, grid_cols, grid_rows, dot_size, dot_spacing, output_path,
             if level > 0:
                 cx = col * cell + cell // 2
                 cy = row * cell + cell // 2
-                # Scale radius by level for visual clarity (xTool grayscale handles power)
                 r = max(1, int(radius * (0.5 + 0.5 * level / (levels - 1))))
                 cv2.circle(img, (cx, cy), r, GRAY[level], -1)
 
     cv2.imwrite(output_path, img)
 
+    # Write disc.json sidecar
+    disc_json_path = os.path.splitext(output_path)[0] + '_disc.json'
+    disc = {
+        'format': '2D',
+        'magic': MAGIC_2D_5D.hex(),
+        'cols': grid_cols,
+        'rows': grid_rows,
+        'ecc': ecc,
+        'levels': levels,
+        'source_file': os.path.basename(input_path),
+        'source_crc32': f'{crc32:08X}',
+        'png': os.path.basename(output_path),
+    }
+    with open(disc_json_path, 'w') as f:
+        json.dump(disc, f, indent=2)
+
     fill = len(payload_symbols) / capacity_symbols * 100
     grid_mm = (img_w / 300) * 25.4
-    raw_bits_used = len(file_to_symbols(rs_payload, levels)) * bpp
 
     print(f"✅  5D Encoded : {input_path}")
     print(f"    File      : {file_size} bytes  |  CRC32: {crc32:08X}")
@@ -187,6 +193,7 @@ def encode(input_path, grid_cols, grid_rows, dot_size, dot_spacing, output_path,
     print(f"    Grid      : {grid_cols}×{grid_rows}  |  Data area: {dcols}×{drows}  |  {fill:.1f}% full")
     print(f"    Capacity  : {capacity_bits//8} bytes usable @ {levels}-level (vs {capacity_bits//8//bpp}B binary)")
     print(f"    PNG       : {output_path}  ({img_w}×{img_h} px)")
+    print(f"    Sidecar   : {disc_json_path}")
     print()
     print(f"📐  xTool F2 Ultra — True 5D Inner Engraving:")
     print(f"    Import    : {output_path}")
@@ -202,7 +209,8 @@ def encode(input_path, grid_cols, grid_rows, dot_size, dot_spacing, output_path,
     print(f"      Gray  (128) = med dot   (level 2, ~80% power)")
     print(f"      Black (  0) = large dot (level 3, 100% power)")
     print()
-    print(f"    Decode with: python3 decode_ssle.py --cols {grid_cols} --rows {grid_rows} --ecc {ecc}")
+    print(f"    Decode with: python3 decode_ssle.py --disc {disc_json_path}")
+    print(f"             or: python3 decode_ssle.py --cols {grid_cols} --rows {grid_rows} --ecc {ecc}")
 
 
 if __name__ == '__main__':

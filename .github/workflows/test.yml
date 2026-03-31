@@ -1,0 +1,48 @@
+name: Pipeline Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install opencv-python-headless numpy reedsolo
+
+      - name: Run 2D pipeline test
+        run: python3 test_pipeline.py --test 2d
+
+      - name: Run 3D pipeline test
+        run: python3 test_pipeline.py --test 3d
+
+      - name: Run 2D pipeline test with noise (RS recovery)
+        run: python3 test_pipeline.py --test 2d --noise 50
+
+      - name: Verify calibrate_glass --generate runs cleanly
+        run: python3 calibrate_glass.py --generate --output /tmp/cal_target.png
+
+      - name: Verify encode_ssle --help
+        run: python3 encode_ssle.py --help
+
+      - name: Verify encode_ssle_3d --capacity
+        run: python3 encode_ssle_3d.py --capacity --cols 200 --rows 200 --layers 5
+
+      - name: Verify decode_ssle --help
+        run: python3 decode_ssle.py --help
+
+      - name: Verify decode_ssle_3d --help
+        run: python3 decode_ssle_3d.py --help

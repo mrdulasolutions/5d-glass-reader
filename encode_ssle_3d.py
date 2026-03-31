@@ -16,48 +16,48 @@ With --levels 4 (default), each grid position encodes 2 bits (4 states):
   2 = medium voxel (STL 2: 55% of pitch → medium power pass)
   3 = large voxel  (STL 3: 70% of pitch → full power pass)
 
-xTool Studio accepts STL/OBJ/3MF directly for inner engraving. Import each
-STL file as a separate job with the matching power/speed setting.
+Header format (v3, 47 bytes):
+  MAGIC(4) + levels(1) + ecc(1) + fname_len(1) + fname(32) + size(4) + crc32(4)
 
-Capacity vs. 2D flat PNG encoder:
-    2D (encode_ssle.py)    : ~56 KB at 100µm XY, 4-level
-    3D (this file), 5 layers: ~280 KB  (5×)
-    3D, 10 layers           : ~560 KB  (10×)
-    3D, 20 layers           : ~1.1 MB  (20×)
+A disc.json sidecar is written after encode so read_disc.sh / decode_ssle_3d.py
+can auto-configure without remembering every parameter.
+
+--render-layers  writes a per-layer grayscale PNG alongside the STLs,
+                 which enables the software 3D round-trip test in test_pipeline.py
+                 and can be used as a visual guide when scanning a disc back.
 
 Usage:
     python3 encode_ssle_3d.py myfile.txt                     # True 5D, 4-level
     python3 encode_ssle_3d.py myfile.txt --levels 2          # binary (1 bit/voxel)
     python3 encode_ssle_3d.py myfile.txt --layers 10
+    python3 encode_ssle_3d.py myfile.txt --render-layers     # also emit per-layer PNGs
     python3 encode_ssle_3d.py --capacity --layers 10 --cols 700 --rows 700
 """
 
 import argparse
+import json
 import math
 import os
 import struct
 import sys
 import zlib
 
+import cv2
 import numpy as np
 from reedsolo import RSCodec
 
-MAGIC_BINARY = b'5DV\x01'   # 3D binary (1 bit/position)
-MAGIC_5D     = b'5DV\x02'   # 3D True 5D (2 bits/position for 4-level)
+from constants import (
+    MAGIC_3D_5D, MAGIC_3D_BINARY,
+    FIDUCIAL_SIZE, BORDER, MAX_FILENAME_LEN,
+    HEADER_BYTES, DEFAULT_ECC, DEFAULT_LEVELS,
+    GRAY, bits_per_position,
+)
 
-FIDUCIAL_SIZE = 3
-BORDER = 1
-MAX_FILENAME_LEN = 32
-# v2 header: MAGIC(4) + fname_len(1) + fname(32) + file_size(4) + crc32(4) = 45
-# v3 header: MAGIC(4) + levels(1) + fname_len(1) + fname(32) + file_size(4) + crc32(4) = 46
-HEADER_BYTES = 4 + 1 + 1 + MAX_FILENAME_LEN + 4 + 4   # 46 (v2 always uses levels byte now)
-DEFAULT_ECC = 20
-DEFAULT_COLS = 200
-DEFAULT_ROWS = 200
-DEFAULT_LAYERS = 5
+DEFAULT_COLS       = 200
+DEFAULT_ROWS       = 200
+DEFAULT_LAYERS     = 5
 DEFAULT_XY_PITCH_MM = 0.10   # 100 µm — safe for xTool F2 Ultra (20 µm spot)
 DEFAULT_Z_PITCH_MM  = 0.50   # 500 µm between layers
-DEFAULT_LEVELS = 4
 
 # Voxel size as fraction of pitch, per level (1=small, 2=medium, 3=large)
 VOXEL_FRACTION = {1: 0.40, 2: 0.55, 3: 0.70}
@@ -75,18 +75,18 @@ def _cube_tris(cx, cy, cz, s):
         (cx+h, cy+h, cz+h), (cx-h, cy+h, cz+h),
     ]
     faces_normals = [
-        ((v[0],v[2],v[1]), ( 0, 0,-1)),
-        ((v[0],v[3],v[2]), ( 0, 0,-1)),
-        ((v[4],v[5],v[6]), ( 0, 0, 1)),
-        ((v[4],v[6],v[7]), ( 0, 0, 1)),
-        ((v[0],v[1],v[5]), ( 0,-1, 0)),
-        ((v[0],v[5],v[4]), ( 0,-1, 0)),
-        ((v[2],v[3],v[7]), ( 0, 1, 0)),
-        ((v[2],v[7],v[6]), ( 0, 1, 0)),
-        ((v[0],v[4],v[7]), (-1, 0, 0)),
-        ((v[0],v[7],v[3]), (-1, 0, 0)),
-        ((v[1],v[2],v[6]), ( 1, 0, 0)),
-        ((v[1],v[6],v[5]), ( 1, 0, 0)),
+        ((v[0], v[2], v[1]), (0,  0, -1)),
+        ((v[0], v[3], v[2]), (0,  0, -1)),
+        ((v[4], v[5], v[6]), (0,  0,  1)),
+        ((v[4], v[6], v[7]), (0,  0,  1)),
+        ((v[0], v[1], v[5]), (0, -1,  0)),
+        ((v[0], v[5], v[4]), (0, -1,  0)),
+        ((v[2], v[3], v[7]), (0,  1,  0)),
+        ((v[2], v[7], v[6]), (0,  1,  0)),
+        ((v[0], v[4], v[7]), (-1, 0,  0)),
+        ((v[0], v[7], v[3]), (-1, 0,  0)),
+        ((v[1], v[2], v[6]), (1,  0,  0)),
+        ((v[1], v[6], v[5]), (1,  0,  0)),
     ]
     return faces_normals
 
@@ -106,12 +106,7 @@ def write_binary_stl(path, all_tris_normals, label=''):
 
 # ── Encoding helpers ──────────────────────────────────────────────────────────
 
-def bits_per_position(levels):
-    return int(math.log2(levels))
-
-
 def file_to_symbols(data: bytes, levels: int) -> list:
-    """Convert bytes to base-`levels` symbols."""
     bpp = bits_per_position(levels)
     bits = []
     for byte in data:
@@ -122,7 +117,7 @@ def file_to_symbols(data: bytes, levels: int) -> list:
     symbols = []
     for i in range(0, len(bits), bpp):
         val = 0
-        for b in bits[i:i+bpp]:
+        for b in bits[i:i + bpp]:
             val = (val << 1) | b
         symbols.append(val)
     return symbols
@@ -134,12 +129,14 @@ def data_volume(cols, rows, layers):
     return dc, dr, layers
 
 
-def build_header(filename, file_size, crc32, levels):
-    magic = MAGIC_5D if levels == 4 else MAGIC_BINARY
+def build_header(filename, file_size, crc32, levels, ecc):
+    """v3 header: MAGIC(4)+levels(1)+ecc(1)+fname_len(1)+fname(32)+size(4)+crc32(4) = 47 bytes."""
+    magic = MAGIC_3D_5D if levels >= 2 else MAGIC_3D_BINARY
     fname = os.path.basename(filename).encode()[:MAX_FILENAME_LEN]
     return (
         magic
         + bytes([levels])
+        + bytes([ecc])
         + bytes([len(fname)])
         + fname.ljust(MAX_FILENAME_LEN, b'\x00')
         + struct.pack('>I', file_size)
@@ -161,22 +158,41 @@ def print_capacity(cols, rows, layers, ecc, xy_pitch, z_pitch, levels):
     print(f"\n📦 3D Voxel Grid Capacity  ({levels}-level, {bpp} bits/position)")
     print(f"   Grid      : {cols}×{rows}×{layers} layers")
     print(f"   XY pitch  : {xy_pitch*1000:.0f} µm   Z pitch: {z_pitch*1000:.0f} µm")
-    print(f"   Volume    : {vol_x:.1f}×{vol_y:.1f}×{vol_z:.1f} mm  (fits in 70×70×150 mm inner area)")
+    print(f"   Volume    : {vol_x:.1f}×{vol_y:.1f}×{vol_z:.1f} mm")
     print(f"   Raw bits  : {raw_bits:,}  ({raw_bytes/1024:.1f} KB)")
     print(f"   RS ECC={ecc} : {ecc//2} byte errors/block correctable")
     print(f"   Usable    : ~{usable/1024:.1f} KB after header + ECC overhead")
-    print(f"   vs binary : {bpp}× the capacity of a binary 3D grid at same XY/Z density\n")
+    print(f"   vs binary : {bpp}× the capacity of a binary 3D grid at same density\n")
+
+
+def render_layer_png(grid_layer, cols, rows, output_path, dot_spacing=10, dot_size=6, levels=4):
+    """Render a single-layer 2D PNG from a grid layer (for testing / visual QC)."""
+    cell = dot_spacing
+    img_h = rows * cell
+    img_w = cols * cell
+    img = np.full((img_h, img_w), 255, dtype=np.uint8)
+    radius = max(1, dot_size // 2)
+    for row in range(rows):
+        for col in range(cols):
+            level = int(grid_layer[row, col])
+            if level > 0:
+                cx = col * cell + cell // 2
+                cy = row * cell + cell // 2
+                r = max(1, int(radius * (0.5 + 0.5 * level / (levels - 1))))
+                cv2.circle(img, (cx, cy), r, GRAY[level], -1)
+    cv2.imwrite(output_path, img)
 
 
 # ── Main encoder ──────────────────────────────────────────────────────────────
 
-def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, levels):
+def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, levels,
+           render_layers=False):
     with open(input_path, 'rb') as f:
         file_data = f.read()
 
     file_size = len(file_data)
     crc32 = zlib.crc32(file_data) & 0xFFFFFFFF
-    header = build_header(input_path, file_size, crc32, levels)
+    header = build_header(input_path, file_size, crc32, levels, ecc)
     raw_payload = header + file_data
 
     rs = RSCodec(ecc)
@@ -198,10 +214,10 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
 
     payload_symbols += [0] * (capacity_symbols - len(payload_symbols))
 
-    # Build 3D grid: grid[layer][row][col] = level 0-3
+    # Build 3D grid: grid[layer][row][col] = level 0–3
     grid = np.zeros((layers, rows, cols), dtype=np.uint8)
 
-    # Fiducial markers at all 4 corners of every layer (always level 3 = full power)
+    # Fiducial markers at all 4 corners of every layer (level 3 = full power)
     for layer in range(layers):
         for ry, rx in [
             (0, 0),
@@ -209,9 +225,8 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
             (rows - FIDUCIAL_SIZE, 0),
             (rows - FIDUCIAL_SIZE, cols - FIDUCIAL_SIZE),
         ]:
-            grid[layer, ry:ry+FIDUCIAL_SIZE, rx:rx+FIDUCIAL_SIZE] = 3
+            grid[layer, ry:ry + FIDUCIAL_SIZE, rx:rx + FIDUCIAL_SIZE] = 3
 
-    # Fill data area: layer-major order
     origin_r = FIDUCIAL_SIZE + BORDER
     origin_c = FIDUCIAL_SIZE + BORDER
     sym_idx = 0
@@ -221,9 +236,24 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
                 grid[layer, row, col] = payload_symbols[sym_idx]
                 sym_idx += 1
 
-    # Build STL files — one per non-zero level (or single combined for binary)
+    # Optionally render per-layer PNGs (used by test_pipeline.py 3D test)
+    layer_pngs = []
+    if render_layers:
+        base_dir = os.path.dirname(output_path) or '.'
+        base_name = os.path.splitext(os.path.basename(output_path))[0]
+        layers_dir = os.path.join(base_dir, base_name + '_layers')
+        os.makedirs(layers_dir, exist_ok=True)
+        for i in range(layers):
+            png_path = os.path.join(layers_dir, f'layer_{i:02d}.png')
+            render_layer_png(grid[i], cols, rows, png_path, levels=levels)
+            layer_pngs.append(png_path)
+        print(f"    Layers   : {layers} PNGs → {layers_dir}/")
+
+    # Build STL files
+    stl_files = []
+    base = os.path.splitext(output_path)[0]
+
     if levels == 2:
-        # Binary: single STL, all level-1 voxels
         all_tris = []
         voxel_size = xy_pitch * VOXEL_FRACTION[1]
         voxel_count = 0
@@ -240,10 +270,7 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
         stl_files = [(output_path, voxel_count, 1)]
         print(f"✅  3D Encoded (binary): {input_path}")
     else:
-        # 4-level: 3 separate STL files, one per non-zero level
-        base = os.path.splitext(output_path)[0]
         level_names = {1: 'small', 2: 'medium', 3: 'large'}
-        stl_files = []
         for target_level in [1, 2, 3]:
             tris = []
             voxel_size = xy_pitch * VOXEL_FRACTION[target_level]
@@ -261,8 +288,27 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
                 stl_path = f"{base}_L{target_level}_{level_names[target_level]}.stl"
                 write_binary_stl(stl_path, tris, label=level_names[target_level])
                 stl_files.append((stl_path, count, target_level))
-
         print(f"✅  3D Encoded (True 5D): {input_path}")
+
+    # Write disc.json sidecar
+    disc_json_path = base + '_disc.json'
+    disc = {
+        'format': '3D',
+        'magic': MAGIC_3D_5D.hex() if levels >= 2 else MAGIC_3D_BINARY.hex(),
+        'cols': cols,
+        'rows': rows,
+        'layers': layers,
+        'ecc': ecc,
+        'levels': levels,
+        'xy_pitch_mm': xy_pitch,
+        'z_pitch_mm': z_pitch,
+        'source_file': os.path.basename(input_path),
+        'source_crc32': f'{crc32:08X}',
+        'stl_files': [s[0] for s in stl_files],
+        'layer_pngs_dir': (layer_pngs[0].rsplit('/', 1)[0] if layer_pngs else None),
+    }
+    with open(disc_json_path, 'w') as f:
+        json.dump(disc, f, indent=2)
 
     fill = len(file_to_symbols(rs_payload, levels)) / capacity_symbols * 100
     vol_x = cols * xy_pitch
@@ -276,22 +322,23 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
     print(f"    RS size  : {len(raw_payload)}B raw → {len(rs_payload)}B with ECC")
     print(f"    Grid     : {cols}×{rows}×{layers} layers  |  {fill:.1f}% full")
     print(f"    Capacity : {capacity_bits//8} bytes @ {levels}-level (vs {capacity_bits//8//bpp}B binary)")
+    print(f"    Sidecar  : {disc_json_path}")
     print()
 
     if levels == 4:
         print(f"📐  xTool F2 Ultra — True 5D Inner Engraving (3 passes):")
         print(f"    Volume   : {vol_x:.1f}×{vol_y:.1f}×{vol_z:.1f} mm")
-        print(f"    Medium   : K9 crystal (calibrate) or JGS2 fused silica (production)")
         print()
         power_map = {1: '50–60%', 2: '65–75%', 3: '80–90%'}
         for stl_path, count, lv in stl_files:
             stl_mb = os.path.getsize(stl_path) / 1024 / 1024
-            print(f"    Pass L{lv} ({['','small','medium','large'][lv]:6s}): {stl_path}")
+            name = ['', 'small', 'medium', 'large'][lv]
+            print(f"    Pass L{lv} ({name:6s}): {stl_path}")
             print(f"             {count:,} voxels  |  {stl_mb:.1f} MB  |  Power: {power_map[lv]}  |  Speed: 500 mm/s")
-            print(f"             Import → xTool Studio → Inner Engraving (3D mode)")
         print()
         print(f"    ⚠️  Engrave all 3 STL files without moving the crystal between passes.")
-        print(f"    Decode with: python3 decode_ssle_3d.py --cols {cols} --rows {rows} --layers {layers} --ecc {ecc} --levels {levels}")
+        print(f"    Decode with: python3 decode_ssle_3d.py --disc {disc_json_path}")
+        print(f"             or: python3 decode_ssle_3d.py --cols {cols} --rows {rows} --layers {layers} --ecc {ecc} --levels {levels}")
     else:
         stl_path, count, _ = stl_files[0]
         stl_mb = os.path.getsize(stl_path) / 1024 / 1024
@@ -299,7 +346,9 @@ def encode(input_path, cols, rows, layers, xy_pitch, z_pitch, output_path, ecc, 
         print(f"    STL      : {stl_path}  ({stl_mb:.1f} MB,  {count:,} voxels)")
         print(f"    Volume   : {vol_x:.1f}×{vol_y:.1f}×{vol_z:.1f} mm")
         print(f"    Power    : 60–70%  |  Speed: 500 mm/s  |  Z step: {z_pitch:.2f} mm")
-        print(f"    Decode with: python3 decode_ssle_3d.py --cols {cols} --rows {rows} --layers {layers} --ecc {ecc} --levels 2")
+        print(f"    Decode with: python3 decode_ssle_3d.py --disc {disc_json_path}")
+
+    return layer_pngs  # returned for use by test_pipeline.py
 
 
 if __name__ == '__main__':
@@ -322,6 +371,8 @@ if __name__ == '__main__':
                         help=f'Reed-Solomon ECC symbols (default: {DEFAULT_ECC})')
     parser.add_argument('--levels',   type=int,   default=DEFAULT_LEVELS, choices=[2, 4],
                         help='Voxel levels: 4=True 5D (2 bits/pos, default), 2=binary')
+    parser.add_argument('--render-layers', action='store_true',
+                        help='Also emit per-layer grayscale PNGs (used by 3D software test)')
     parser.add_argument('--capacity', action='store_true',
                         help='Print capacity for this grid and exit (no input file needed)')
     args = parser.parse_args()
@@ -339,4 +390,5 @@ if __name__ == '__main__':
 
     out = args.output or os.path.splitext(args.input_file)[0] + '_voxel.stl'
     encode(args.input_file, args.cols, args.rows, args.layers,
-           args.xy_pitch, args.z_pitch, out, args.ecc, args.levels)
+           args.xy_pitch, args.z_pitch, out, args.ecc, args.levels,
+           render_layers=args.render_layers)
