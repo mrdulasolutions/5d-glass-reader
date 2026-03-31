@@ -36,9 +36,11 @@ The xTool F2 Ultra UV 5W is both the **writer** and the **reader**. Its dual 48M
 6. [Full Workflow](#full-workflow)
 7. [Storage Density](#storage-density)
 8. [3D Volumetric Mode](#3d-volumetric-mode)
-9. [Software Setup](#software-setup)
-10. [File Structure](#file-structure)
-11. [Roadmap](#roadmap)
+9. [Known Issues & Tuning](#known-issues--tuning)
+10. [Density Upgrade Path](#density-upgrade-path)
+11. [Software Setup](#software-setup)
+12. [File Structure](#file-structure)
+13. [Roadmap](#roadmap)
 
 ---
 
@@ -415,7 +417,7 @@ python3 test_pipeline.py
 │
 │  ── Setup ───────────────────────────────────────────────────────────────
 ├── setup.sh                one-time install (Pi)
-├── requirements.txt        picamera2 · opencv · numpy · reedsolo · numpy-stl
+├── requirements.txt        picamera2 · opencv · numpy · reedsolo · RPi.GPIO
 │
 │  ── Docs ────────────────────────────────────────────────────────────────
 ├── README.md               this file
@@ -426,6 +428,97 @@ python3 test_pipeline.py
 
 ---
 
+## Known Issues & Tuning
+
+### Glass cracking / micro-explosions
+The most common failure mode. UV laser energy deposits fast — if power is too high or dot duration too long, it creates uncontrolled cracks instead of clean scattering bubbles.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Cloudy white streak instead of a dot | Power too high | Drop power 5–10% and re-test |
+| Dots visible but surrounded by cracks | Dot duration too long | Reduce from 300µs → 150µs |
+| Entire region turns opaque/milky | Speed too slow or power too high | Increase speed first, then reduce power |
+| No dots visible at all | Power too low, below threshold | Raise power 5% at a time |
+| Edge dots crack, center fine | Z depth too close to surface | Move Z point deeper (try 2mm instead of 1mm) |
+
+**Golden rule:** start at 60% power / 200µs dot duration on a fresh K9 blank. Work up in 5% power increments. The sweet spot is usually 65–75% for K9, 70–80% for JGS2 fused silica.
+
+---
+
+### Lighting for reading (capture quality)
+
+The decoder lives or dies by the capture image. Scattering dots are only visible when light hits them at the right angle — they glow bright white under raking (side) illumination and are nearly invisible under straight-on overhead light.
+
+| Reader path | Lighting recommendation |
+|-------------|------------------------|
+| **xTool F2 Ultra camera** | Hold a flashlight or phone torch at ~20° angle to the crystal surface before taking the Studio snapshot. Rotate until dots glow white. |
+| **USB microscope** | Use the microscope's built-in ring light at low intensity + a side flashlight. Ring light alone flattens contrast. |
+| **Pi HQ Camera** | Mount a cheap LED strip at a low angle (15–25°) on the frame. Avoid diffuse overhead lighting entirely. |
+
+**Threshold tuning:** if `decode_ssle.py` reports RS errors, try adjusting `--threshold`:
+- Dots appear dim → lower threshold (try `--threshold 60`)
+- Background noise is high → raise threshold (try `--threshold 100`)
+- True 5D: if gray levels are collapsing, check that xTool Studio was set to **Grayscale** mode (not Bitmap/Jarvis)
+
+---
+
+### Alignment & fiducial detection
+If the decoder prints `"fiducials not found — skipping perspective correction"`, the grid will decode misaligned and RS will likely fail.
+
+- Ensure the crystal is placed flat and square in the machine for both write and read
+- For USB microscope: the crystal must be level — use a small piece of blu-tack under a corner if it rocks
+- Increase contrast with better side-lighting before recapturing
+- If fiducials were engraved too faint (low power pass), they may not threshold — try raising `--threshold` to 120+
+
+---
+
+### True 5D gray level separation
+For multi-level (4-level) decoding to work, the captured image must show **four distinct gray bands**, not just black/white. If the decode is failing despite good alignment:
+
+1. Confirm xTool Studio was in **Grayscale** inner engraving mode (not Bitmap, Jarvis, or Dither)
+2. Check that the power range covers the full spread — L1 dots must be visibly lighter than L3 dots
+3. Use a USB microscope or Pi HQ camera (higher contrast than the xTool's built-in cameras for subtle gray differences)
+4. Fall back to `--levels 2` to verify basic pipeline, then troubleshoot L1/L2 separation
+
+---
+
+## Density Upgrade Path
+
+The current hardware is already capable of much higher density than the conservative defaults. Upgrades in order of effort:
+
+### 1. Tighter pitch — 40 µm dots (near-term, software only)
+The xTool F2 Ultra has a 20 µm spot size — 40 µm pitch is theoretically achievable and would 2.5× the dot count vs 100 µm.
+
+- Increase `--cols` and `--rows` to match (`--cols 1250 --rows 1250` for 50×50mm)
+- Bump ECC: `--ecc 40` for stronger error correction at higher density
+- Validate on K9 first — tighter dots mean less margin for cracking
+- Expected gain: **~135 KB → ~340 KB** (2D True 5D, K9 50×50mm)
+
+### 2. Z-focus stacking on the reader (medium-term, hardware)
+The 3D encoder already outputs multi-layer STLs. The bottleneck is the reader — capturing each Z layer requires manual refocus today. A motorized Z stage on the Pi rig makes this fully automated.
+
+- Hardware: motorized Z stage (~$80–150, same stepper driver as XY stage)
+- Software: extend `scan_disc.py` with `--z-layers N --z-step 0.5` — already in the roadmap
+- Unlock: **full 96-layer reads = 5.2 MB on a single K9 block**, unattended
+
+### 3. Switch to femtosecond laser (the big jump)
+COTS UV SSLE creates scattering microbubbles — readable but limited in dot size precision. A femtosecond laser (Ti:Sapphire or fiber fs) creates true nanograting voxels with controlled birefringence. This is what the University of Southampton "5D storage" papers use.
+
+- **What changes:** dot size control becomes polarization state + retardance → 5 bits/voxel instead of 2
+- **What stays:** all encoding logic, ECC, fiducials, file format, decoder pipeline
+- **Cost jump:** $50K–$200K lab laser vs $4,249 xTool — but the software is already there
+- **Why build COTS first:** prove the pipeline, build the community, then the hardware upgrade is a drop-in
+
+### 4. Integrate the z1998w 5D ML decoder (birefringence era)
+When the build moves to femtosecond birefringence encoding, the optical readout becomes a polarimetry problem — pixel brightness alone is insufficient. The z1998w architecture uses a CNN trained on polarization-resolved microscopy images to classify voxel state directly from raw sensor data, recovering 5 bits/voxel.
+
+- **Integration point:** swap `classify_level()` in `decode_ssle.py` / `decode_ssle_3d.py` for the z1998w inference call
+- **Input:** polarization-resolved image stack (0°, 45°, 90°, 135° analyzer angles)
+- **Output:** per-voxel symbol (0–31, 5-bit) → feeds directly into existing RS decoder
+- **Estimated capacity at that stage:** 10–50 GB per cm³ of fused silica
+
+---
+
 ## Roadmap
 
 | Version | Status | What |
@@ -433,10 +526,10 @@ python3 test_pipeline.py
 | v0.1 | ✅ | Manual capture, dot detection, basic decode |
 | v0.2 | ✅ | Encoder + RS ECC + motorized XY stage + raster scan + 3D STL encoder/decoder + three reader paths |
 | v0.3 | ✅ | **True 5D encoding** — dot size as 5th dimension, 4-level grayscale, 2 bits/position, 2× capacity |
-| v0.4 | 🔨 | Image tile stitcher · Z-stage for automated 3D reads · 50µm density validation |
-| v0.5 | planned | Adaptive threshold · better fiducial detection (SIFT/ORB) |
-| v1.0 | planned | Turnkey SSLE read/write on Pi 5 — one command, full disc |
-| v2.0 | future | 6D: femtosecond birefringence (polarization + retardance) on top of SSLE |
+| v0.4 | 🔨 | Image tile stitcher · Z-stage for automated 3D reads · 40µm density validation |
+| v0.5 | planned | Adaptive threshold · SIFT/ORB fiducial detection · full 96-layer K9 read |
+| v1.0 | planned | Turnkey SSLE read/write on Pi 5 — one command, full disc, automated Z-stack |
+| v2.0 | future | Femtosecond laser drop-in · birefringence encoding · z1998w ML decoder |
 
 ---
 
