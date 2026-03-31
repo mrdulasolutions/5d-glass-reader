@@ -53,10 +53,27 @@ chmod +x run_reader.sh
 
 ## How to Use (End-to-End Workflow)
 
-1. **Encode** — Run the encoder (coming in v0.2) → generates PNG dot grid from any file.
-2. **Engrave** — Load PNG into xTool software → engrave into fused silica blank (subsurface mode).
-3. **Capture** — Place engraved disc under Pi camera → `./run_reader.sh`
-4. **Decode** → captures image → detects scattering dots → outputs `output/decoded_file.bin`
+**Step 1 — Encode any file to a dot-grid PNG:**
+```bash
+python3 encode_ssle.py myfile.txt
+# → outputs myfile_grid.png + prints xTool settings
+```
+
+**Step 2 — Engrave:**
+Load `myfile_grid.png` into xTool software → subsurface mode → engrave into fused silica blank.
+The encoder prints the exact physical size and power/speed settings to use.
+
+**Step 3 — Scan & decode:**
+```bash
+./run_reader.sh
+# → captures disc → detects dots → outputs output/myfile.txt
+```
+Pass `--cols` / `--rows` to match what you used during encoding (default 200×200).
+
+**Grid capacity (default 200×200):**
+~4.5 KB per disc. Use `--cols 400 --rows 400` for ~18 KB. The encoder tells you exactly.
+
+**CRC32 verification is built in** — you'll know immediately if the decode was clean.
 
 ---
 
@@ -64,9 +81,10 @@ chmod +x run_reader.sh
 
 ```
 5d-glass-reader/
-├── capture_scattering.py  # Step 1: capture glass disc image
-├── decode_ssle.py         # Step 2: detect dots + decode to binary
-├── run_reader.sh          # Runs both steps in sequence
+├── encode_ssle.py         # Step 0: any file → xTool dot-grid PNG (run on laptop)
+├── capture_scattering.py  # Step 1: capture glass disc image (run on Pi)
+├── decode_ssle.py         # Step 2: detect dots + decode back to file (run on Pi)
+├── run_reader.sh          # Runs capture + decode in sequence
 ├── setup.sh               # One-time Pi install script
 ├── requirements.txt       # Python deps
 ├── ETHOS.md               # Why we are building this
