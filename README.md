@@ -2,41 +2,44 @@
 **mrdulasolutions/5d-glass-reader** · indie hacker build · March 2026
 
 World's first fully commercial-off-the-shelf subsurface laser engraving (SSLE) glass memory drive + reader.
-No femtosecond lasers. No lab. No gatekeepers. Just a UV laser, a Raspberry Pi, and some fused silica.
+No femtosecond lasers. No lab. No gatekeepers. Just a UV laser and some fused silica.
 
 **Writer**: xTool F2 Ultra UV 5W — engraves dots *inside* glass
-**Reader**: Raspberry Pi 5 + HQ Camera + motorized XY stage
+**Reader**: xTool F2 Ultra (same machine!) · USB microscope · or Raspberry Pi 5
 **Media**: K9 optical crystal (calibration) · JGS2 fused silica (production)
-**Status**: v0.2 — full encode → engrave → scan → decode pipeline with Reed-Solomon ECC + motorized stage
+**Status**: v0.2 — full encode → engrave → read pipeline, three reader paths, RS ECC
 
 ---
 
 ## Table of Contents
-1. [How It Works](#how-it-works)
+1. [The Core Idea](#the-core-idea)
 2. [Hardware & Cost](#hardware--cost)
 3. [xTool F2 Ultra — Specs & Settings](#xtool-f2-ultra--specs--settings)
-4. [Storage Density](#storage-density)
-5. [Software Setup](#software-setup)
-6. [End-to-End Workflow](#end-to-end-workflow)
-7. [3D Volumetric Mode](#3d-volumetric-mode-v03)
-8. [File Structure](#file-structure)
-9. [Roadmap](#roadmap)
+4. [The Three Reader Paths](#the-three-reader-paths)
+5. [Full Workflow](#full-workflow)
+6. [Storage Density](#storage-density)
+7. [3D Volumetric Mode](#3d-volumetric-mode)
+8. [Software Setup](#software-setup)
+9. [File Structure](#file-structure)
+10. [Roadmap](#roadmap)
 
 ---
 
-## How It Works
+## The Core Idea
 
 ```
-Any file  →  encode_ssle.py  →  dot-grid PNG  →  xTool F2 Ultra  →  glass disc
-                                                  (subsurface dots)
-glass disc  →  Pi camera  →  decode_ssle.py  →  original file recovered
+WRITE                              READ (reverse — same machine)
+─────                              ──────────────────────────────
+Your file                          Load K9 back into F2 Ultra
+    ↓                                  ↓
+encode_ssle_3d.py → .stl          xTool Studio → Snapshot
+    ↓                                  ↓
+xTool Studio → import STL         capture_scattering.py --source xtool
+    ↓                                  ↓
+F2 Ultra engraves K9 crystal      decode_ssle.py → original file ✅
 ```
 
-1. `encode_ssle.py` converts your file to a binary dot-grid PNG (dot = 1, blank = 0) with Reed-Solomon error correction baked in and 4-corner fiducial markers for perspective correction on decode.
-2. Load the PNG into **xTool Studio** → Inner Engraving → Dotting mode. The machine fires the UV laser *inside* the glass at each dot position, creating a permanent white scattering point.
-3. Place the disc under the Pi camera. `decode_ssle.py` finds the fiducials, corrects perspective, samples the grid, RS-decodes, and writes the original file back out.
-
-**3D mode** (`encode_ssle_3d.py`) outputs an STL instead — xTool Studio engraves dots at multiple Z depths, multiplying capacity by the number of layers.
+**The xTool F2 Ultra is both writer AND reader.** Its dual 48MP cameras can snapshot the engraved dot pattern. Feed that image to `decode_ssle.py`. No extra hardware required for a basic read. The Raspberry Pi path adds automated scanning for large discs.
 
 ---
 
@@ -44,21 +47,21 @@ glass disc  →  Pi camera  →  decode_ssle.py  →  original file recovered
 
 | Component | Price (Mar 2026) | Buy Direct |
 |-----------|-----------------|------------|
-| **xTool F2 Ultra UV 5W** (writer) | **$4,249** | [xtool.com → F2 Ultra UV](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver) |
-| **K9 Rectangle Crystal** (calibration blank, 100×50×50mm) | **~$15–25 ea** | [xtool.com → K9 Rectangle (1pc)](https://www.xtool.com/products/k9-rectangle-crystal-1pcs) |
-| **K9 Crystal Ball Inner Engraved Kit** (includes fixture + ball) | **~$30–50** | [xtool.com → K9 Ball Kit](https://www.xtool.com/products/k9-crystal-ball-inner-engraved-kit) |
-| **Raspberry Pi 5** (4GB) | **~$60–80** | [raspberrypi.com](https://www.raspberrypi.com) · Micro Center · PiShop.us |
-| **Pi HQ Camera** (IMX477, 12MP) | **~$55–65** | [Arducam kit — Amazon](https://www.amazon.com/Arducam-IMX477-Camera-Raspberry-Compatible/dp/B0D95VWCV6) |
-| **JGS2 fused silica blanks** (production, 5–10pk) | **$40–80** | [eBay JGS2 discs](https://www.ebay.com/itm/274136028727) · [Amazon optical-grade](https://www.amazon.com/Optical-Grade-Fused-Silica-Wafer-Thickness/dp/B0G7VRNT66) |
-| **Motorized XY stage** | **$70–300** | Amazon: search "PT-XY100 motorized microscope stage" |
-| **2020 extrusion frame + misc** | **~$50** | Any Amazon extrusion kit |
+| **xTool F2 Ultra UV 5W** ← writer + reader | **$4,249** | [xtool.com → F2 Ultra UV](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver) |
+| **K9 Rectangle Crystal** (100×50×50mm blank) | **~$15–25 ea** | [xtool.com → K9 Rectangle (1pc)](https://www.xtool.com/products/k9-rectangle-crystal-1pcs) |
+| **K9 Crystal Ball Inner Engraved Kit** | **~$30–50** | [xtool.com → K9 Ball Kit](https://www.xtool.com/products/k9-crystal-ball-inner-engraved-kit) |
+| **JGS2 fused silica blanks** (5–10pk, production) | **$40–80** | [eBay JGS2 discs](https://www.ebay.com/itm/274136028727) · [Amazon optical-grade](https://www.amazon.com/Optical-Grade-Fused-Silica-Wafer-Thickness/dp/B0G7VRNT66) |
+| *(optional)* USB digital microscope | **$30–100** | Amazon: "USB digital microscope 1000x" |
+| *(optional)* Raspberry Pi 5 (4GB) | **~$60–80** | [raspberrypi.com](https://www.raspberrypi.com) · Micro Center |
+| *(optional)* Pi HQ Camera (IMX477) | **~$55–65** | [Arducam kit — Amazon](https://www.amazon.com/Arducam-IMX477-Camera-Raspberry-Compatible/dp/B0D95VWCV6) |
+| *(optional)* Motorized XY stage | **$70–300** | Amazon: "PT-XY100 motorized microscope stage" |
+| *(optional)* 2020 extrusion frame | **~$50** | Any Amazon extrusion kit |
 
-**Total: ~$4,600–$5,000** (mostly the xTool)
+**Minimum to start: ~$4,300** (xTool + K9 crystals — that's it)
+**Full automated rig: ~$4,800–$5,000**
 
-> **Inner engraving lens:** The F2 Ultra UV ships with a dedicated inner engraving lens in the box — no extra purchase needed. Swap it before running inner/subsurface mode. See the [xTool inner engraving setup guide](https://support.xtool.com/article/2708).
-
-> **Which glass to buy first?**
-> Start with the **K9 rectangle crystal** (100×50×50mm, ~$15–25). It's optically matched to the F2 Ultra UV and engraves cleanly out of the box. Use it to dial in power/speed/focus. Then move to cheaper JGS2 fused silica blanks for production runs.
+> **Inner engraving lens ships in the box** — no extra purchase. Swap it before inner/subsurface mode.
+> Setup guide: [support.xtool.com/article/2708](https://support.xtool.com/article/2708)
 
 ---
 
@@ -66,156 +69,209 @@ glass disc  →  Pi camera  →  decode_ssle.py  →  original file recovered
 
 | Spec | Value |
 |------|-------|
-| Laser | 5W UV 355 nm (cold processing — no burning or surface damage) |
+| Laser | 5W UV 355 nm — cold processing, no surface burning |
 | Spot size | **0.02 mm (20 µm)** |
 | Max engraving speed | **15,000 mm/s** |
-| Inner engraving area | **70 × 70 mm** (swap to dedicated inner lens first) |
-| Max material height | 150 mm (Z axis) |
-| Software | **xTool Studio** (free) |
-| Input for 2D dotting | PNG, JPG, BMP, SVG — load our dot-grid PNG directly |
-| Input for 3D inner | STL, OBJ, AMF, 3MF, GLB, PLY — load our voxel STL directly |
+| Inner engraving area | **70 × 70 mm** (dedicated inner lens, included) |
+| Max material height (Z) | 150 mm |
+| Built-in cameras | **Dual 48MP** — used for alignment AND reading |
+| Software | **xTool Studio** (free download) |
+| 2D input (dotting mode) | PNG, JPG, BMP, SVG — load our dot-grid PNG directly |
+| 3D input (inner engraving) | **STL, OBJ, AMF, 3MF, GLB, PLY** — load our voxel STL directly |
 
-### Starting settings for fused silica / K9 (tune from here)
+### Engrave settings (start here, tune for your glass)
 
-| Parameter | 2D flat grid | 3D voxel STL |
-|-----------|-------------|--------------|
+| Setting | 2D PNG dotting | 3D STL inner |
+|---------|---------------|--------------|
 | Power | 80% | 60–70% |
 | Speed | 300–500 mm/s | 500 mm/s |
 | Dot duration | 50–100 µs | 50 µs |
 | Z depth | 1 mm below surface | auto per layer |
 | Mode | Dotting / Bitmap | Inner Engraving (3D) |
 
-**Dial in on the included K9 test block first.** Correct dots look like bright white scattering points when lit from the side — not cracks, not cloudy regions. If dots crack the glass, reduce power or increase speed.
+**Start on K9 crystal** (optically ideal). Correct dots = bright white scattering points lit from the side. Cracks or cloudy regions = reduce power.
 
 ### About the AI Composer (AImake / Atomm)
 
-xTool Studio includes an AI model generator (via Atomm) that converts a **photo → 3D portrait mesh** for artistic crystal engravings (the "grandma in a glass cube" product). It takes JPG/PNG/WEBP images and outputs artistic 3D models.
+xTool Studio includes Atomm's AI 3D Model Generator — converts a **photo → artistic 3D portrait mesh** for crystal souvenirs. Input: JPG/PNG/WEBP. Output: beautiful 3D model of a face.
 
-**It cannot encode arbitrary files or binary data.** Our encoder and decoder handle that. The two tools are complementary, not interchangeable.
+It **cannot encode arbitrary binary files** and has no concept of data storage. Our encoder handles that. The two tools are complementary — Atomm for art, our encoder for data.
+
+---
+
+## The Three Reader Paths
+
+### ⚡ FASTEST + EASIEST — xTool F2 Ultra (same machine)
+*No extra hardware. The machine you already have.*
+
+```
+Load engraved K9 back into F2 Ultra
+    → xTool Studio: Camera icon → Snapshot → Save image
+    → python3 capture_scattering.py --source xtool --file snapshot.png
+    → python3 decode_ssle.py
+```
+
+The F2 Ultra's **dual 48MP cameras** can image the engraved dot pattern.
+Pro tip: shine a flashlight at a low angle on the crystal before snapping —
+scattering dots glow bright white under raking light.
+
+**Hardware needed:** Nothing beyond what you already bought.
+**Best for:** Quick verify, low-volume reads, single disc.
+
+---
+
+### 💡 EASIEST standalone reader — USB Digital Microscope (~$30)
+*Works on any laptop. No Pi, no GPIO, no configuration.*
+
+```
+Plug USB microscope into laptop
+Position engraved disc under microscope
+    → python3 capture_scattering.py --source usb
+    → python3 decode_ssle.py
+```
+
+Any $30–100 USB digital microscope from Amazon resolves 100µm dots fine.
+Run `decode_ssle.py` directly on your Mac or Windows machine.
+
+**Hardware needed:** USB microscope, laptop.
+**Best for:** Desktop read station, demos, development.
+
+---
+
+### 🎯 MOST ACCURATE — Raspberry Pi + HQ Camera + Motorized Stage
+*Automated full-disc raster scan. Best image quality. Most repeatable.*
+
+```
+Pi HQ Camera + motorized XY stage over disc
+    → python3 scan_disc.py --width 20 --height 20 --step 0.5
+    → python3 decode_ssle.py raw_scattering/scan_0.00_0.00.png
+```
+
+Use `stage_control.py` for XY movement. Captures every grid zone automatically.
+Best for large discs, high-density grids, or production workflows.
+
+**Hardware needed:** Pi 5 + HQ Camera + motorized XY stage + frame.
+**Best for:** High-density grids, full-disc scanning, production.
+
+---
+
+## Full Workflow
+
+### Write (encode → STL → engrave)
+
+**Step 1 — Encode your file:**
+```bash
+# 3D voxel STL (recommended — higher capacity, native xTool 3D mode)
+python3 encode_ssle_3d.py myfile.txt --layers 5
+# → myfile_voxel.stl  +  exact xTool Studio import settings
+
+# 2D flat PNG (simpler, great for small files)
+python3 encode_ssle.py myfile.txt
+# → myfile_grid.png  +  exact xTool Studio import settings
+```
+
+**Step 2 — Engrave in xTool Studio:**
+- Open **xTool Studio** → New Project
+- Import `myfile_voxel.stl` (3D mode) or `myfile_grid.png` (2D dotting mode)
+- Swap to inner engraving lens
+- Set physical dimensions to the values printed by the encoder
+- Place K9 crystal in machine → Engrave
+
+---
+
+### Read (reverse — load K9 back into F2)
+
+**Option A — xTool F2 Ultra camera (fastest + easiest):**
+```bash
+# 1. Load engraved K9 back into F2 Ultra
+# 2. xTool Studio → Camera icon → Snapshot → save file
+python3 capture_scattering.py --source xtool --file snapshot.png
+python3 decode_ssle.py
+```
+
+**Option B — USB microscope:**
+```bash
+python3 capture_scattering.py --source usb
+python3 decode_ssle.py
+```
+
+**Option C — Pi HQ Camera (most accurate):**
+```bash
+./run_reader.sh
+```
+
+**One-liner for all paths:**
+```bash
+# A: python3 decode_ssle.py raw_scattering/capture.png --cols 200 --rows 200
+# B/C: same — capture first, then decode
+```
+
+---
+
+### Verify before engraving (no hardware needed)
+```bash
+python3 test_pipeline.py               # clean software round-trip
+python3 test_pipeline.py --noise 100   # test RS error recovery
+python3 test_pipeline.py --density     # print capacity table
+```
 
 ---
 
 ## Storage Density
 
-### 2D Flat Mode (encode_ssle.py → PNG → xTool dotting mode)
+### 2D flat PNG (encode_ssle.py → xTool dotting mode)
 
-| Dot pitch | Grid (70×70mm area) | Raw capacity | After RS ECC (ECC=20) |
-|-----------|--------------------|--------------|-----------------------|
-| 200 µm (safe starter) | 350×350 | ~15 KB | ~14 KB |
-| 100 µm (recommended) | 700×700 | ~61 KB | **~56 KB** |
-| 75 µm | 933×933 | ~109 KB | ~100 KB |
-| 50 µm (aggressive) | 1400×1400 | ~245 KB | ~224 KB |
+| Dot pitch | Grid in 70×70mm | Usable after RS ECC |
+|-----------|----------------|---------------------|
+| 200 µm (safe starter) | 350×350 | ~14 KB |
+| **100 µm (recommended)** | 700×700 | **~56 KB** |
+| 75 µm | 933×933 | ~100 KB |
+| 50 µm (aggressive) | 1400×1400 | ~224 KB |
 
-### 3D Volumetric Mode (encode_ssle_3d.py → STL → xTool inner engraving)
+### 3D voxel STL (encode_ssle_3d.py → xTool inner engraving 3D)
 
-| Layers | 100µm XY pitch | Usable after ECC |
-|--------|----------------|-----------------|
-| 5 | 700×700×5 | **~280 KB** |
-| 10 | 700×700×10 | **~560 KB** |
-| 20 | 700×700×20 | **~1.1 MB** |
+| Layers | 100µm XY, 70×70mm | Usable after RS ECC |
+|--------|---------------------|---------------------|
+| 5 layers | 700×700×5 | **~280 KB** |
+| 10 layers | 700×700×10 | **~560 KB** |
+| 20 layers | 700×700×20 | **~1.1 MB** |
 
-> Run `python3 encode_ssle_3d.py --capacity` to calculate exact capacity for your settings.
-> Run `python3 test_pipeline.py --density` for the full 2D density table.
+```bash
+python3 encode_ssle_3d.py --capacity --layers 10   # exact capacity for your settings
+```
+
+---
+
+## 3D Volumetric Mode
+
+The F2 Ultra natively accepts STL for inner engraving — it fires the laser at each voxel's 3D coordinates automatically. Our encoder builds the STL; xTool Studio handles the Z-layering.
+
+```bash
+python3 encode_ssle_3d.py myfile.txt --layers 5
+# → myfile_voxel.stl  (import directly into xTool Studio)
+
+# Decode from per-layer images (one image per Z depth):
+python3 decode_ssle_3d.py layers/ --layers 5
+```
+
+> **Z-focus for 3D reads:** Requires focus adjustment per layer. Use F2 Ultra's auto-focus (each snapshot at a different Z) or a motorized Z stage on the Pi rig. Hardware for automated 3D reads is the v0.3 milestone.
 
 ---
 
 ## Software Setup
 
-**On your Pi (reader hardware):**
 ```bash
 git clone https://github.com/mrdulasolutions/5d-glass-reader.git
 cd 5d-glass-reader
-bash setup.sh
+bash setup.sh          # Pi  — installs all deps + creates dirs
+# OR
+pip install -r requirements.txt   # Mac/Windows laptop — encoder + decoder only
 ```
 
-**On your laptop/Mac (encoder — no Pi needed):**
+**Test the full pipeline (no hardware):**
 ```bash
-git clone https://github.com/mrdulasolutions/5d-glass-reader.git
-cd 5d-glass-reader
-pip install -r requirements.txt
+python3 test_pipeline.py
 ```
-
-**Verify the full software pipeline (no hardware needed):**
-```bash
-python3 test_pipeline.py                    # clean round-trip
-python3 test_pipeline.py --noise 100        # test RS recovery with 100 bit-flips
-python3 test_pipeline.py --density          # print density table
-```
-
----
-
-## End-to-End Workflow
-
-### 2D (flat dot grid) — simplest, recommended for v0.1 hardware
-
-**Step 1 — Encode:**
-```bash
-python3 encode_ssle.py myfile.txt
-# → myfile_grid.png  +  prints xTool Studio import settings
-```
-
-**Step 2 — Engrave:**
-- Open **xTool Studio** → New Project → Import `myfile_grid.png`
-- Set physical size to the mm value printed by the encoder
-- Mode: **Dotting** (bitmap inner engraving)
-- Swap to inner engraving lens, set Z depth ~1mm below surface
-- Engrave onto K9 crystal or fused silica blank
-
-**Step 3 — Scan:**
-```bash
-./run_reader.sh
-# prompts: place disc under camera → press Enter → captures + decodes
-```
-
-**Step 4 — Decode output:**
-```
-output/myfile.txt   ← your original file, recovered from glass
-```
-
-Pass `--cols`/`--rows`/`--ecc` to `decode_ssle.py` if you used non-default encoder settings.
-
----
-
-### Full disc raster scan (motorized stage)
-
-```bash
-python3 scan_disc.py --width 20 --height 20 --step 0.5
-# scans 20×20mm area in 0.5mm steps → saves raw_scattering/scan_X_Y.png tiles
-# then decode each tile: python3 decode_ssle.py raw_scattering/scan_0.00_0.00.png
-```
-
-Test without hardware:
-```bash
-python3 scan_disc.py --sim
-python3 stage_control.py --sim --x 10 --y 10
-```
-
----
-
-## 3D Volumetric Mode (v0.3)
-
-Encodes data across multiple Z depths → outputs an **STL** → load directly into xTool Studio inner engraving. Capacity scales linearly with number of layers.
-
-**Encode:**
-```bash
-python3 encode_ssle_3d.py myfile.txt --layers 5
-# → myfile_voxel.stl  +  prints xTool Studio import settings
-
-python3 encode_ssle_3d.py --capacity --layers 10   # check capacity before encoding
-```
-
-**Engrave:**
-- xTool Studio → Import `myfile_voxel.stl` → Inner Engraving (3D mode)
-- Scale model to fit 70×70mm area — Studio handles Z layer sequencing automatically
-
-**Decode** (requires per-layer captures at each Z depth):
-```bash
-# Capture one image per Z depth → save as layers/layer_00.png, layer_01.png, ...
-python3 decode_ssle_3d.py layers/ --layers 5
-# → output/myfile.txt
-```
-
-> **Reader hardware for 3D:** Z-adjustable focus required — motorized Z stage or liquid lens module. Coming in v0.3 hardware build. The encoder and decoder are fully implemented now.
 
 ---
 
@@ -224,38 +280,34 @@ python3 decode_ssle_3d.py layers/ --layers 5
 ```
 5d-glass-reader/
 │
-│  ── Encoding (run on laptop/Mac) ──
-├── encode_ssle.py         # any file → 2D dot-grid PNG  (xTool dotting mode)
-├── encode_ssle_3d.py      # any file → 3D voxel STL     (xTool inner engraving 3D)
+│  ── Encoding (run on any machine) ──────────────────────────────────────
+├── encode_ssle.py          2D: any file → dot-grid PNG  (xTool dotting mode)
+├── encode_ssle_3d.py       3D: any file → voxel STL     (xTool inner 3D mode)
 │
-│  ── Decoding (run on Pi) ──
-├── capture_scattering.py  # capture glass disc image via Pi HQ camera
-├── decode_ssle.py         # 2D dot-grid PNG → original file  (RS ECC + fiducials)
-├── decode_ssle_3d.py      # multi-layer images → original file (3D RS decode)
-├── run_reader.sh          # one-shot: capture + 2D decode
+│  ── Capture (three paths — see The Three Reader Paths above) ───────────
+├── capture_scattering.py   --source xtool ⚡ | usb 💡 | pi 🎯 | file
 │
-│  ── Stage control ──
-├── stage_control.py       # XY stepper driver (PT-XY100 + RPi.GPIO, sim mode)
-├── scan_disc.py           # automated boustrophedon raster scan + manifest
+│  ── Decoding ────────────────────────────────────────────────────────────
+├── decode_ssle.py          2D dot-grid → original file  (RS ECC + fiducials)
+├── decode_ssle_3d.py       3D multi-layer → original file
+├── run_reader.sh           one-shot: Pi capture + 2D decode
 │
-│  ── Testing & verification ──
-├── test_pipeline.py       # full encode→decode round-trip (no hardware needed)
-│                          # --noise N: RS recovery test  --density: capacity table
+│  ── Stage / automated scanning ─────────────────────────────────────────
+├── stage_control.py        XY stepper driver (PT-XY100, RPi.GPIO, sim mode)
+├── scan_disc.py            automated boustrophedon raster scan + manifest
 │
-│  ── Setup & config ──
-├── setup.sh               # one-time Pi install script
-├── requirements.txt       # Python deps (picamera2, opencv, numpy, reedsolo, ...)
+│  ── Verification ────────────────────────────────────────────────────────
+├── test_pipeline.py        encode→decode round-trip  --noise --density
 │
-│  ── Project docs ──
-├── README.md              # this file
-├── ETHOS.md               # why we are building this
-├── CONTRIBUTING.md        # how to join
-├── LICENSE                # MIT
+│  ── Setup ───────────────────────────────────────────────────────────────
+├── setup.sh                one-time install (Pi)
+├── requirements.txt        picamera2 · opencv · numpy · reedsolo · numpy-stl
 │
-│  ── Runtime dirs (gitignored) ──
-├── raw_scattering/        # captured images
-├── raw_scattering/layers/ # per-Z-depth layer images for 3D decode
-└── output/                # decoded files
+│  ── Docs ────────────────────────────────────────────────────────────────
+├── README.md               this file
+├── ETHOS.md                why we are building this
+├── CONTRIBUTING.md         how to join the build
+└── LICENSE                 MIT
 ```
 
 ---
@@ -264,12 +316,12 @@ python3 decode_ssle_3d.py layers/ --layers 5
 
 | Version | Status | What |
 |---------|--------|------|
-| v0.1 | ✅ shipped | Manual capture, dot detection, basic decode |
-| v0.2 | ✅ shipped | Encoder + RS ECC + motorized XY stage + raster scan + pipeline test |
-| v0.3 | 🔨 in progress | 3D STL encoder ✅ · 3D decoder ✅ · Z-stage hardware · image tile stitcher |
-| v0.4 | planned | Higher dot density (50µm) · adaptive threshold · better fiducial detection |
-| v1.0 | planned | Full SSLE read/write pipeline — turnkey on Pi 5 |
-| v2.0 | future | True 5D upgrade: femtosecond birefringence encoding (polarization + retardance) |
+| v0.1 | ✅ | Manual capture, dot detection, basic decode |
+| v0.2 | ✅ | Encoder + RS ECC + motorized XY stage + raster scan + 3D STL encoder/decoder + three reader paths |
+| v0.3 | 🔨 | Image tile stitcher · Z-stage for automated 3D reads · 50µm density validation |
+| v0.4 | planned | Adaptive threshold · better fiducial detection (SIFT/ORB) |
+| v1.0 | planned | Turnkey SSLE read/write on Pi 5 — one command, full disc |
+| v2.0 | future | True 5D: femtosecond birefringence encoding (polarization + retardance) |
 
 ---
 
@@ -277,4 +329,4 @@ Built live with Grok + Claude. No gatekeepers. Only build.
 
 **⭐ Star this repo if you're in.**
 
-See [ETHOS.md](ETHOS.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [LICENSE](LICENSE)
+[ETHOS.md](ETHOS.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [LICENSE](LICENSE)
