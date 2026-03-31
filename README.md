@@ -42,17 +42,20 @@ glass disc  →  Pi camera  →  decode_ssle.py  →  original file recovered
 
 ## Hardware & Cost
 
-| Component | Price (Mar 2026) | Link |
-|-----------|-----------------|------|
-| xTool F2 Ultra UV 5W | **$4,249** | [xtool.com](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver) |
-| Raspberry Pi 5 (4GB) | **~$60–80** | [raspberrypi.com](https://www.raspberrypi.com) or Micro Center |
-| Pi HQ Camera (IMX477) | **~$55–65** | [Arducam kit on Amazon](https://www.amazon.com/Arducam-IMX477-Camera-Raspberry-Compatible/dp/B0D95VWCV6) |
-| K9 optical crystal blanks | **~$15–25 each** | [xTool K9 Rectangle](https://www.xtool.com/products/k9-rectangle-crystal-1pcs) |
-| JGS2 fused silica blanks (5–10pk) | **$40–80** | [eBay JGS2 discs](https://www.ebay.com/itm/274136028727) · [Amazon packs](https://www.amazon.com/Optical-Grade-Fused-Silica-Wafer-Thickness/dp/B0G7VRNT66) |
-| Motorized XY stage | **$70–300** | Amazon: "PT-XY100 motorized microscope stage" |
-| 2020 extrusion frame + misc | **~$50** | Any Amazon extrusion kit |
+| Component | Price (Mar 2026) | Buy Direct |
+|-----------|-----------------|------------|
+| **xTool F2 Ultra UV 5W** (writer) | **$4,249** | [xtool.com → F2 Ultra UV](https://www.xtool.com/products/xtool-f2-ultra-uv-5w-uv-laser-engraver) |
+| **K9 Rectangle Crystal** (calibration blank, 100×50×50mm) | **~$15–25 ea** | [xtool.com → K9 Rectangle (1pc)](https://www.xtool.com/products/k9-rectangle-crystal-1pcs) |
+| **K9 Crystal Ball Inner Engraved Kit** (includes fixture + ball) | **~$30–50** | [xtool.com → K9 Ball Kit](https://www.xtool.com/products/k9-crystal-ball-inner-engraved-kit) |
+| **Raspberry Pi 5** (4GB) | **~$60–80** | [raspberrypi.com](https://www.raspberrypi.com) · Micro Center · PiShop.us |
+| **Pi HQ Camera** (IMX477, 12MP) | **~$55–65** | [Arducam kit — Amazon](https://www.amazon.com/Arducam-IMX477-Camera-Raspberry-Compatible/dp/B0D95VWCV6) |
+| **JGS2 fused silica blanks** (production, 5–10pk) | **$40–80** | [eBay JGS2 discs](https://www.ebay.com/itm/274136028727) · [Amazon optical-grade](https://www.amazon.com/Optical-Grade-Fused-Silica-Wafer-Thickness/dp/B0G7VRNT66) |
+| **Motorized XY stage** | **$70–300** | Amazon: search "PT-XY100 motorized microscope stage" |
+| **2020 extrusion frame + misc** | **~$50** | Any Amazon extrusion kit |
 
 **Total: ~$4,600–$5,000** (mostly the xTool)
+
+> **Inner engraving lens:** The F2 Ultra UV ships with a dedicated inner engraving lens in the box — no extra purchase needed. Swap it before running inner/subsurface mode. See the [xTool inner engraving setup guide](https://support.xtool.com/article/2708).
 
 > **Which glass to buy first?**
 > Start with the **K9 rectangle crystal** (100×50×50mm, ~$15–25). It's optically matched to the F2 Ultra UV and engraves cleanly out of the box. Use it to dial in power/speed/focus. Then move to cheaper JGS2 fused silica blanks for production runs.
