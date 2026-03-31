@@ -2,4 +2,5 @@ picamera2
 opencv-python
 numpy
 reedsolo
+numpy-stl
 RPi.GPIO

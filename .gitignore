@@ -16,6 +16,9 @@ env/
 # Runtime output — track directories but not contents
 raw_scattering/*
 !raw_scattering/.gitkeep
+!raw_scattering/layers/
+raw_scattering/layers/*
+!raw_scattering/layers/.gitkeep
 output/*
 !output/.gitkeep
 
